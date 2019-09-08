@@ -3,7 +3,6 @@
 简介：
 
 Download file supports breakpoint resume. (python)
-
 用于下载文件的程序（支持断点续传）. (python)
 
 Example:
