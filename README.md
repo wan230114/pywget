@@ -7,8 +7,7 @@
 
 ### 简介：
 
-* Download file supports breakpoint resume. (python)
-* 用于下载文件的程序（支持断点续传）. (python)
+* 用于下载文件的程序（支持断点续传）. (python)  Download file supports breakpoint resume. (python)
 * 可以进行数据转发代理下载。
 
 ### 还需要改进的地方：
@@ -18,7 +17,7 @@
 ### Example:
 
 ```bash
-sh run_server.sh
-sh run_client.sh
-sh run-test.sh
+sh run_server.sh  # 启动服务端
+sh run_client.sh  # 客户端运行示例
+sh run-test.sh    # 客户端运行示例
 ```
