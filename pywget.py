@@ -7,12 +7,9 @@
 # @Last Modified time: 2019-10-07 18:03:30
 
 import argparse
-import sys
-import os
-import re
-import time
+import sys, os, getpass, re
+import time, datetime
 import requests
-import getpass
 import json
 import struct
 from socket import *
@@ -43,6 +40,7 @@ class pywget:
         self._proxy = config.get('proxy', None)
         self._sock = self.__server_Connect__(self._proxy) if self._proxy else False
         self._size = 0  # 记录断点位置字节数
+        self._size2 = 0  # 记录此时获得了多少字节数据
         self._size_recved = 0  # 接收的字节数
         self._size_total = 0  # 需要下载的文件总字节数
         self.filename = config.get('filename', None)
@@ -52,16 +50,16 @@ class pywget:
         '''clean name'''
         name = os.path.basename(path_name)
         dirname = os.path.abspath(os.path.dirname(path_name))
-        newname, n = re.subn('[\\\/\:\*\?\"\<\>\|]', '', name)
+        newname, n = re.subn(r'[\\/:*?"\'<>|]', '_', name)
         if n:
-            print('file renamed: %s --> %s' % (name, newname), n)
+            print('file renamed: %s --> %s' % (name, newname), '替换了', n, '次')
         os.makedirs(dirname, exist_ok=True)
         return os.sep.join([dirname, name])
 
     def __touch__(self, filename):
         '''clean file'''
         with open(filename, 'w+') as fin:
-            print('touch_clean_file:', filename)
+            print('touch_file:', filename)
 
     def __support_continue__(self, url):
         '''test url'''
@@ -85,8 +83,8 @@ class pywget:
             print('[stat]支持断点续传')
         else:
             print('[stat]下载不支持断点续传，已重置下载文件')
-            self.__touch__(tmp_filename)
             self.__touch__(local_filename)
+            self.__touch__(tmp_filename)
         if self._size != 0:
             headers_range = "bytes=%d-" % (self._size - 1)
             # headers_range = "bytes=%d-" % (self._size if self._size == 0
@@ -97,8 +95,8 @@ class pywget:
         '''get size'''
         D = {0: 'B', 1: 'K', 2: 'M', 3: 'G', 4: 'T'}
         for x in D:
-            if int(size) < 1024**(x + 1):
-                hsize = str('%.3f' % (int(size) / 1024**x)) + D[x]
+            if int(size) < 1024 ** (x + 1):
+                hsize = str('%.3f' % (int(size) / 1024 ** x)) + D[x]
                 return hsize
 
     def __server_Connect__(self, proxy):
@@ -222,30 +220,40 @@ class pywget:
         # 1) 文件准备
         finished = False
         print('Download start:')
+        print('[url]:', self._url)
         url, filename, force, block = self._url, self.filename, self.force, self._block
         if not filename:
             filename = self.__remove_nonchars__(url.split('/')[-1])
         local_filename = self.__remove_nonchars__(filename)
         tmp_filename = local_filename + '.downtmp'
-        try:
-            with open(tmp_filename, 'rb') as fin:
-                self._size = int(fin.read())
-        except Exception as e:
-            # print('WARNING:', e)
-            self.__touch__(tmp_filename)
         self.local_filename, self.tmp_filename = local_filename, tmp_filename
 
-        if os.path.exists(local_filename) and not os.path.exists(tmp_filename):
-            if not force:
-                print('下载文件已存在，%s' % local_filename)
+        # 此处应该判断文件大小是否完整
+        stat = self.__support_continue__(url)  # 如果支持断点续传
+        if os.path.exists(local_filename):
+            if stat:
+                # 判断缓存文件是否存在
                 try:
-                    if input('是否覆盖文件？(回车-->覆盖，任意字符串退出)：'):
-                        sys.exit(1)
-                except OSError:
-                    print('文件已存在，已跳过下载')
-                    sys.exit(1)
-            else:
+                    with open(tmp_filename, 'rb') as fin:
+                        self._size = int(fin.read())
+                except Exception as e:
+                    print('获取已下载字节数报错，已重置下载文件')
+                    self.__touch__(local_filename)
+                    self.__touch__(tmp_filename)
+            elif os.path.getsize(local_filename) == self._size_total:
+                # 判断下载的文件长度是否完全
+                if not force:
+                    print('下载文件已存在，%s' % local_filename)
+                    print('请求返回字节数与文件大小相等，为:', self._size_total)
+                    print('已跳过下载')
+                    return
+                    # try:
+                    #     if input('是否覆盖文件？(回车-->覆盖，任意字符串退出)：'):
+                    #         sys.exit(1)
+                    # except OSError:
                 self.__touch__(local_filename)
+        else:  # 否则重建文件
+            self.__touch__(local_filename)
 
         # 2) 请求开始
         try:
@@ -256,17 +264,19 @@ class pywget:
             else:
                 self.__do_recv__()
                 iters = self.__do_recv2__()
-            start_t = time.time()
+            print("Downloading...")
             if self._size_total > 0:
                 print("[+] Size: %s" % self.__getsize__(self._size_total - self._size))
             else:
                 print("[+] Size: None")
-            print("Downloading...")
-            self._size2 = self._size
+            self._size2 = self._size  # 记录此时获得了多少数据
+            _size2_last = self._size2
             with open(local_filename, 'ab+') as f:
                 f.seek(self._size if self._size == 0 else self._size - 1)
                 f.truncate()
                 n = 0.1
+                time_start = datetime.datetime.now()
+                t0 = time.time()
                 for chunk in iters:
                     if chunk:
                         f.write(chunk)
@@ -274,36 +284,50 @@ class pywget:
                         self._size2 += len(chunk)
                         try:
                             # print(size, self._size_total, n)
+                            do = 0
                             if self._size2 / self._size_total > n:
                                 n += 0.05
-                                sys.stdout.write('Now: %s, Total: %s\n' %
-                                                 (self.__getsize__(self._size2),
-                                                  self.__getsize__(self._size_total)))
+                                do = 1
+                            elif (self._size2 - _size2_last) // (20 * 1024 ** 2):
+                                do = 1
+                            if do:
+                                sys.stdout.write('\bNow: %s, Total: %s, Download Speed: %s/s\n' % (
+                                    self.__getsize__(self._size2),
+                                    self.__getsize__(self._size_total),
+                                    self.__getsize__((self._size2 - _size2_last) / (time.time() - t0))))
                                 sys.stdout.flush()
+                                t0 = time.time()
+                                _size2_last = self._size2
                         except ZeroDivisionError:
                             pass
-                finished = True
-                os.remove(tmp_filename)
-                spend = time.time() - start_t
-                speed_tmp = self.__getsize__(self._size2 - self._size)
-                speed = float(speed_tmp[:-1]) / (spend if spend else 1)
-                sys.stdout.write(
-                    '\nDownload Finished!\nTotal Time: %.3fs, Download Speed: %.3f%s/s\n' % (spend, speed, speed_tmp[-1]))
-                sys.stdout.flush()
+                if self._size_total == self._size2:
+                    finished = True
+                    os.remove(tmp_filename)
+                    time_spend = datetime.datetime.now() - time_start
+                    speed_tmp = self.__getsize__(self._size2 - self._size)
+                    speed = float(speed_tmp[:-1]) / (
+                        time_spend.total_seconds() if time_spend.total_seconds() else 1)
+                    sys.stdout.write(
+                        '[Download Finished]!\n[Total Time]: %s\n[Download Speed]: %.3f%s/s\n' % (
+                            time_spend, speed, speed_tmp[-1]))
+                    sys.stdout.flush()
+                else:
+                    print('WARNING, 下载可能未完成，已下载(b)/总下载(b)：', self._size2, '/', self._size_total)
         except Exception:
             import traceback
-            print(traceback.print_exc())
-            print("\nDownload pause.\n")
+            traceback.print_exc()
         finally:
             if not finished:
-                with open(tmp_filename, 'w') as ftmp:
-                    ftmp.write(str(self._size2))
+                with open(tmp_filename, 'w') as tmp:
+                    tmp.write(str(self._size2))
+                print("\nDownload pause.\n")
+                raise
 
 
 def main():
     kwargs = fargv()
-    # kwargs['url'] = 'http://118.89.194.65/genome.gff3.idx'
     pywget(kwargs).download()
+
     # pywget({'url': 'http://cd15-c120-1.play.bokecc.com/flvs/cb/QxEZF/hIZrEKBTdq-2.pcf?t=1570436774&key=C98D110A66E8B92F34D54244D2676754&tpl=10&tpt=111',
     #         'headers': {"Referer": "http://www.tmooc.cn/player/index.shtml?courseId=5DF587D41C7C40759DEAF911C5C7B188",
     #                     "Sec-Fetch-Mode": "no-cors",
@@ -313,4 +337,6 @@ def main():
 
 
 if __name__ == '__main__':
+    pywget({'url': 'http://118.89.194.65/genome.gff3.idx'}).download()
+    sys.exit()
     main()
