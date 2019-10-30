@@ -27,6 +27,11 @@ def print(*args, **kwargs):
 
 class pywgetServer:
 
+    def __touch__(self, filename):
+        '''clean file'''
+        with open(filename, 'w+') as fin:
+            print('touch_file:', filename)
+
     def __init__(self, proxy):
         self._sock_s = self.__getsocket__(proxy)
 
@@ -117,6 +122,7 @@ class pywgetServer:
 
                     # 1) 发送是否可以续传和开始信息
                     stat, total_size = self.__support_continue__(url)
+                    print(stat, total_size)
                     connfd.send(('%s[start]' % stat).encode('utf-8'))
 
                     # 2) 接收网页请求头
