@@ -4,11 +4,15 @@
 # @Qmail:  1170101471@qq.com
 # @Date:   2019-09-08 17:24:02
 # @Last Modified by:   JUN
-# @Last Modified time: 2019-10-07 18:03:30
+# @Last Modified time: 2019-10-24 20:08:12
 
 import argparse
-import sys, os, getpass, re
-import time, datetime
+import sys
+import os
+import getpass
+import re
+import time
+import datetime
 import requests
 import json
 import struct
@@ -25,7 +29,10 @@ def fargv():
                         help='代理服务端的IP及端口，如：118.96.72.54:8668')
     parser.add_argument('-f', '--force', action='store_true', default=False,
                         help='当下载文件存在时是否跳过询问直接覆盖')
+    parser.add_argument('-c', '--complete', action='store_true', default=False,
+                        help='当下载文件存在时是否跳过询问直接覆盖')
     args = parser.parse_args()
+    print(args)
     return args.__dict__
 
 
@@ -34,6 +41,9 @@ class pywget:
 
     def __init__(self, config={}):
         self._url = config['url']
+        self.filename = config.get('filename', None)
+        self.force = config.get('force', False)
+        self._speed_end = '\n' if config.get('complete', False) else '\r'
         self._block = int(config.get('block', 1024))
         self._headers = config.get(
             'headers', {"User-Agent": "Wget/1.12 (cygwin)", "Accept": "*/*"})
@@ -43,8 +53,6 @@ class pywget:
         self._size2 = 0  # 记录此时获得了多少字节数据
         self._size_recved = 0  # 接收的字节数
         self._size_total = 0  # 需要下载的文件总字节数
-        self.filename = config.get('filename', None)
-        self.force = config.get('force', False)
 
     def __remove_nonchars__(self, path_name):
         '''clean name'''
@@ -282,24 +290,23 @@ class pywget:
                         f.write(chunk)
                         f.flush()
                         self._size2 += len(chunk)
-                        try:
-                            # print(size, self._size_total, n)
-                            do = 0
-                            if self._size2 / self._size_total > n:
-                                n += 0.05
-                                do = 1
-                            elif (self._size2 - _size2_last) // (20 * 1024 ** 2):
-                                do = 1
-                            if do:
-                                sys.stdout.write('\bNow: %s, Total: %s, Download Speed: %s/s\n' % (
-                                    self.__getsize__(self._size2),
-                                    self.__getsize__(self._size_total),
-                                    self.__getsize__((self._size2 - _size2_last) / (time.time() - t0))))
-                                sys.stdout.flush()
-                                t0 = time.time()
-                                _size2_last = self._size2
-                        except ZeroDivisionError:
-                            pass
+                        # print(size, self._size_total, n)
+                        do = 0
+                        if self._size2 / self._size_total > n:
+                            n += 0.05
+                            do = 1
+                        elif (self._size2 - _size2_last) // (20 * 1024 ** 2):
+                            do = 1
+                        if do and (time.time() - t0 > 0.5):
+                            sys.stdout.write('Now: %s, Total: %s, Download Speed: %s%s' % (
+                                self.__getsize__(self._size2),
+                                self.__getsize__(self._size_total),
+                                '%-11s' % ('%s/s' % self.__getsize__(
+                                    (self._size2 - _size2_last) / (time.time() - t0))),
+                                self._speed_end))
+                            sys.stdout.flush()
+                            t0 = time.time()
+                            _size2_last = self._size2
                 if self._size_total == self._size2:
                     finished = True
                     os.remove(tmp_filename)
@@ -337,6 +344,6 @@ def main():
 
 
 if __name__ == '__main__':
-    pywget({'url': 'http://118.89.194.65/genome.gff3.idx'}).download()
-    sys.exit()
+    # pywget({'url': 'http://118.89.194.65/genome.gff3.idx'}).download()
+    # sys.exit()
     main()
