@@ -5,7 +5,13 @@
 * 用于下载文件的程序（支持断点续传）. (python)  Download file supports breakpoint resume. (python)
 * 可以进行数据转发代理下载。
 
-### 还需要改进的地方：
+### 使用方法
+
+```bash
+git clone https://github.com/wan230114/pywget.git
+```
+
+### 提升空间：
 
 * 目前无法对ftp网址协议传输的文件进行下载及转发，日后需要跟进改进
 
