@@ -43,9 +43,9 @@ class pywgetServer(pywget_funcs):
         return s
 
     def do_parent(self, proxy):
+        self._sock_s = self.__getsocket__(proxy)
         while True:
             try:
-                self._sock_s = self.__getsocket__(proxy)
                 connfd, addr = self._sock_s.accept()
                 self._sock = connfd
                 # 0) 接收请求

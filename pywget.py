@@ -124,7 +124,7 @@ class pywget(pywget_funcs):
                         if self._size2 / self._size_total > n:
                             n += 0.05
                             do = 1
-                        elif (self._size2 - _size2_last) // (20 * 1024 ** 2):
+                        elif (self._size2 - _size2_last) // (10 * 1024 ** 2):
                             do = 1
                         if do and (time.time() - t0 > 0.5):
                             sys.stdout.write('Now: %s, Total: %s, Download Speed: %s%s' % (

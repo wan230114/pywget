@@ -61,7 +61,7 @@ class pywget_funcs:
                 self._size_total = int(r.headers['content-length'])
             except Exception:
                 self._size_total = 0
-        print('获取到文件长度:',self._size_total)
+        print('获取到文件长度:', self._size_total)
         return 0
 
     def __myrecv__(self):
