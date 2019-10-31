@@ -14,8 +14,25 @@ from socket import *
 
 class pywget_funcs:
     '''
-    base
+    base funcs
     '''
+
+    def __init__(self, config={}):
+        self._url = config.get('url', None)
+        self.filename = config.get('filename', None)
+        self.force = config.get('force', False)
+        self._speed_end = '\n' if config.get('complete', False) else '\r'
+        self._block = int(config.get('block', 1024))
+        self._headers = config.get(
+            'headers', {"User-Agent": "Wget/1.12 (cygwin)", "Accept": "*/*"})
+        self._proxy = config.get('proxy', None)
+        self._sock = self.__server_Connect__(
+            self._proxy) if self._proxy else False
+        self._size = 0  # 记录断点位置字节数
+        self._size2 = 0  # 记录此时获得了多少字节数据
+        self._size_recved = 0  # 接收的字节数
+        self._size_total = 0  # 需要下载的文件总字节数
+
     def __touch__(self, filename):
         '''clean file'''
         with open(filename, 'w+') as fin:
@@ -38,31 +55,17 @@ class pywget_funcs:
             crange = r.headers['content-range']
             self._size_total = int(
                 re.match(r'^bytes 0-\d+/(\d+)$', crange).group(1))
-            return True
+            return 1
         except Exception:
-            pass
-        try:
-            self._size_total = int(r.headers['content-length'])
-        except Exception:
-            self._size_total = 0
-        return False
-
-    def __support_continue_do__(self, stat):
-        '''do continue'''
-        local_filename, tmp_filename = self.local_filename, self.tmp_filename
-        if stat:  # 支持断点续传
-            print('[stat]支持断点续传')
-        else:
-            print('[stat]下载不支持断点续传，已重置下载文件')
-            self.__touch__(local_filename)
-            self.__touch__(tmp_filename)
-        if self._size != 0:
-            headers_range = "bytes=%d-" % (self._size - 1)
-            # headers_range = "bytes=%d-" % (self._size if self._size == 0
-            #                                else self._size - 1)
-            self._headers.update(headers_range)
+            try:
+                self._size_total = int(r.headers['content-length'])
+            except Exception:
+                self._size_total = 0
+        print('获取到文件长度:',self._size_total)
+        return 0
 
     def __myrecv__(self):
+        '''获取结构化数据，即：获取报头，解析报头，到真实数据'''
         ll = self.__recv_size__(4)  # 1.获取报头
         header_size = struct.unpack('i', ll)[0]  # 2.解析报头
         header_json = self.__recv_size__(header_size).decode('utf-8')  # 3.接收报文
@@ -71,6 +74,7 @@ class pywget_funcs:
         return self.__recv_size__(size)
 
     def __mysend__(self, msg):
+        '''发送带报头信息的信息'''
         s = self._sock
         header_dic = {'size': len(msg)}  # 1.包装报文
         header_json = json.dumps(header_dic).encode('utf-8')  # 2.处理报文
@@ -91,20 +95,19 @@ class pywget_funcs:
         print('正在排队...')
 
         # 1) 接收断点续传信息和开始信息
-        msg = self.__recv_size__(8)
+        msg = self.__recv_size__(8).decode()
         if int(msg[0]):
             self.__support_continue_do__(True)
-            # print(headers_range)
-        if msg[1:] == b'[start]':
+        if msg[1:] == '[start]':
             print('排队结束, 下载中...')
         else:
             print(msg)
             print('ConnectionError: [start]single not correct')
             sys.exit(1)
-
+        
         # 2) 发送网页请求头
         self.__mysend__(json.dumps(self._headers).encode('utf-8'))
-
+        
         # 3) 接收文件总长度
         self._size_total = int(self.__myrecv__())
         self._size_recved = 0
@@ -112,6 +115,7 @@ class pywget_funcs:
               self.__getsize__(self._size_total), ']')
 
     def __do_recv2__(self):
+        '''传输下载的生成器'''
         n = 0
         t0 = time.time()
         while True:
@@ -169,7 +173,7 @@ class pywget_funcs:
         return s
 
     def __recv_size__(self, len_s):
-        '''处理tcp的收发缓冲区导致的接受不完全问题'''
+        '''接收指定长度的信息，处理tcp的收发缓冲区导致的接受不完全问题'''
         s = self._sock
         # print('01start', len_s)
         L = []

@@ -31,21 +31,24 @@ def fargv():
 
 class pywget(pywget_funcs):
     '''download file function'''
-    def __init__(self, config={}):
-        self._url = config['url']
-        self.filename = config.get('filename', None)
-        self.force = config.get('force', False)
-        self._speed_end = '\n' if config.get('complete', False) else '\r'
-        self._block = int(config.get('block', 1024))
-        self._headers = config.get(
-            'headers', {"User-Agent": "Wget/1.12 (cygwin)", "Accept": "*/*"})
-        self._proxy = config.get('proxy', None)
-        self._sock = self.__server_Connect__(
-            self._proxy) if self._proxy else False
-        self._size = 0  # 记录断点位置字节数
-        self._size2 = 0  # 记录此时获得了多少字节数据
-        self._size_recved = 0  # 接收的字节数
-        self._size_total = 0  # 需要下载的文件总字节数
+
+    def __support_continue_do__(self, stat):
+        '''升级self.headers'''
+        local_filename, tmp_filename = self.local_filename, self.tmp_filename
+        if stat:  # 支持断点续传
+            print('[stat]支持断点续传')
+            if not os.path.exists(tmp_filename):
+                self.__touch__(local_filename)
+                self.__touch__(tmp_filename)
+        else:
+            print('[stat]下载不支持断点续传，已重置下载文件')
+            self.__touch__(local_filename)
+            self.__touch__(tmp_filename)
+        if self._size != 0:
+            headers_range = "bytes=%d-" % (self._size - 1)
+            # headers_range = "bytes=%d-" % (self._size if self._size == 0
+            #                                else self._size - 1)
+            self._headers.update(headers_range)
 
     def download(self):
         '''主程序'''
@@ -55,7 +58,7 @@ class pywget(pywget_funcs):
         print('[url]:', self._url)
         url, filename, force, block = self._url, self.filename, self.force, self._block
         if not filename:
-            filename = self.__remove_nonchars__(url.split('/')[-1])
+            filename = self.__remove_nonchars__(url.split('/')[-1].split('?')[0])
         local_filename = self.__remove_nonchars__(filename)
         tmp_filename = local_filename + '.downtmp'
         self.local_filename, self.tmp_filename = local_filename, tmp_filename
@@ -68,7 +71,7 @@ class pywget(pywget_funcs):
                 try:
                     with open(tmp_filename, 'rb') as fin:
                         self._size = int(fin.read())
-                except Exception as e:
+                except Exception:
                     print('获取已下载字节数报错，已重置下载文件')
                     self.__touch__(local_filename)
                     self.__touch__(tmp_filename)
@@ -84,8 +87,10 @@ class pywget(pywget_funcs):
                     #         sys.exit(1)
                     # except OSError:
                 self.__touch__(local_filename)
+                self.__touch__(tmp_filename)
         else:  # 否则重建文件
             self.__touch__(local_filename)
+            self.__touch__(tmp_filename)
 
         # 2) 请求开始
         try:
@@ -144,6 +149,8 @@ class pywget(pywget_funcs):
                     sys.stdout.flush()
                 else:
                     print('WARNING, 下载可能未完成，已下载(b)/总下载(b)：', self._size2, '/', self._size_total)
+        except KeyboardInterrupt:
+            print('\n程序终止')
         except Exception:
             import traceback
             traceback.print_exc()
@@ -168,6 +175,6 @@ def main():
 
 
 if __name__ == '__main__':
-    pywget({'url': 'http://118.89.194.65/genome.gff3.idx'}).download()
-    sys.exit()
+    # pywget({'url': 'http://118.89.194.65/genome.gff3.idx'}).download()
+    # sys.exit()
     main()
