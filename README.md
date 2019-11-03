@@ -16,7 +16,7 @@ git clone https://github.com/wan230114/pywget.git
 * 目前无法对ftp网址协议传输的文件进行下载及转发，日后需要跟进改进
 
 ### Example:
-
+（服务端与客户端可在两台计算机分别运行）
 ```bash
 # sh run_server.sh  # 启动服务端
 python3 proxy_wget_server.py  # 启动服务端
