@@ -128,7 +128,7 @@ class pywget(pywget_funcs):
             with open(self.local_filename, 'ab+') as f:
                 f.seek(self._size if self._size == 0 else self._size - 1)
                 f.truncate()
-                n = 0.1
+                # n = 0.1
                 time_start = datetime.datetime.now()
                 t0 = time.time()
                 for chunk in iters:
@@ -149,7 +149,8 @@ class pywget(pywget_funcs):
                             sys.stdout.write('Now: %s, Total: %s, Download Speed: %s/s        %s' % (
                                 self.__getsize__(self._size2),
                                 self.__getsize__(self._size_total),
-                                (self.__getsize__((self._size2 - _size2_last) / (time.time() - t0))),
+                                (self.__getsize__(
+                                    (self._size2 - _size2_last) / (time.time() - t0))),
                                 self._speed_end))
                             sys.stdout.flush()
                             t0 = time.time()
@@ -161,7 +162,8 @@ class pywget(pywget_funcs):
                 elif self._size_total == self._size2:
                     finished = True
                 if finished == True:
-                    os.remove(self.tmp_filename)
+                    if os.path.exists(self.tmp_filename):
+                        os.remove(self.tmp_filename)
                     time_spend = datetime.datetime.now() - time_start
                     speed_tmp = self.__getsize__(self._size2 - self._size)
                     speed = float(speed_tmp[:-1]) / (

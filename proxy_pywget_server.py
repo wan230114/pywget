@@ -43,9 +43,9 @@ class pywgetServer(pywget_funcs):
         return s
 
     def do_parent(self, proxy):
-        self._sock_s = self.__getsocket__(proxy)
         while True:
             try:
+                self._sock_s = self.__getsocket__(proxy)
                 connfd, addr = self._sock_s.accept()
                 self._sock = connfd
                 # 0) 接收请求
@@ -59,8 +59,7 @@ class pywgetServer(pywget_funcs):
                     print('收到url请求: ', msg, '\n转发中:', url, who)
 
                     # 1) 发送是否可以续传和开始信息
-                    stat, total_size = self.__support_continue__(
-                        url), self._size_total
+                    stat, total_size = self.__support_continue__(url), self._size_total
                     connfd.send(('%s[start]' % stat).encode('utf-8'))
 
                     # 2) 接收网页请求头
@@ -97,7 +96,7 @@ class pywgetServer(pywget_funcs):
                         print('sending [ok]...')
                         connfd.send('[ok]'.encode())
                         print('sened[ok],耗时%.3fs,传输%s/%s' % (
-                              (time.time() - t0), allsize, total_size))
+                            (time.time() - t0), allsize, total_size))
                         print('Success. 转发成功')
                     else:
                         connfd.send(b'[FL]')
