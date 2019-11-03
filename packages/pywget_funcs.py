@@ -28,6 +28,7 @@ class pywget_funcs:
         self._proxy = config.get('proxy', None)
         self._sock = self.__server_Connect__(
             self._proxy) if self._proxy else False
+        self._stat = 0  # 记录是否支持断点续传
         self._size = 0  # 记录断点位置字节数
         self._size2 = 0  # 记录此时获得了多少字节数据
         self._size_recved = 0  # 接收的字节数
@@ -89,7 +90,8 @@ class pywget_funcs:
         self._sock.send(b'[send-url]')
         # 0) 发送网址信息
         print('[send-url]%s[%s]' % (self._url, getpass.getuser()))
-        self.__mysend__(('[send-url]%s[%s]' % (self._url, getpass.getuser())).encode())
+        self.__mysend__(('[send-url]%s[%s]' %
+                         (self._url, getpass.getuser())).encode())
         print(time.strftime("[%Y-%m-%d %H:%M:%S, Content Success]",
                             time.localtime()))
         print('正在排队...')
@@ -97,6 +99,7 @@ class pywget_funcs:
         # 1) 接收断点续传信息和开始信息
         msg = self.__recv_size__(8).decode()
         if int(msg[0]):
+            self._stat = 1
             self.__support_continue_do__(True)
         if msg[1:] == '[start]':
             print('排队结束, 下载中...')
@@ -104,10 +107,10 @@ class pywget_funcs:
             print(msg)
             print('ConnectionError: [start]single not correct')
             sys.exit(1)
-        
+
         # 2) 发送网页请求头
         self.__mysend__(json.dumps(self._headers).encode('utf-8'))
-        
+
         # 3) 接收文件总长度
         self._size_total = int(self.__myrecv__())
         self._size_recved = 0
@@ -123,7 +126,8 @@ class pywget_funcs:
             if ll == b'[ok]':
                 stime = time.time() - t0
                 hsize = self.__getsize__(self._size_recved)
-                print('\n[下载总大小:', self._size_total, self.__getsize__(self._size_total), ']')
+                print('\n[下载总大小:', self._size_total,
+                      self.__getsize__(self._size_total), ']')
                 print('\n下载完毕',
                       time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                       '\n耗时%.3fs' % (stime),
@@ -132,7 +136,8 @@ class pywget_funcs:
                       sep='\n')
                 break
             elif ll == b'[FL]':
-                print('下载失败，已下载 %s / %s' % (self._size_recved, self._size_total))
+                print('\n下载字节数不统一可能未完成，已下载 %s / %s' %
+                      (self._size_recved, self._size_total))
                 break
             # 1、得到size
             header_size = struct.unpack('i', ll)[0]
@@ -167,7 +172,8 @@ class pywget_funcs:
                 s.connect(ADDR)
                 break
             except (ConnectionRefusedError, timeout):
-                print('Warning: Connect Failed. An error has occurred on the server. Please check server.')
+                print(
+                    'Warning: Connect Failed. An error has occurred on the server. Please check server.')
                 raise
         s.setsockopt(SOL_SOCKET, SO_RCVBUF, 0)  # 设置缓冲区
         return s
@@ -190,3 +196,21 @@ class pywget_funcs:
         assert (recv_size == len_s), "getsize != len_s, %s/%s" % (recv_size, len_s)
         return b''.join(L)
 
+    def __getRequests__(self, _url):
+        '''访问并获取iters'''
+        from requests.packages.urllib3.exceptions import InsecureRequestWarning
+        # 禁用安全请求警告
+        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+        r = requests.get(_url, stream=True,
+                         verify=False, headers=self._headers)
+        n = 0
+        url = _url
+        while (url not in r.url) and n < 20:
+            n += 1
+            url = r.url
+            print('第', n, '次跳转', self._url, r.url)
+            r = requests.get(url, stream=True,
+                             verify=False, headers=self._headers)
+        if n >= 20:
+            raise Exception('跳转次数大于20次，请检查请求地址是否正确')
+        return r

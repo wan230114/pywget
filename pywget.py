@@ -6,11 +6,14 @@
 # @Last Modified by:   JUN
 # @Last Modified time: 2019-10-24 20:08:12
 
-import os,sys
+import os
+import sys
 import argparse
-import datetime,time
+import datetime
+import time
 import requests
 from packages.pywget_funcs import pywget_funcs
+
 
 def fargv():
     parser = argparse.ArgumentParser(description='用于下载文件的程序.')
@@ -21,9 +24,9 @@ def fargv():
     parser.add_argument('-p', '--proxy', type=str, default=None,
                         help='代理服务端的IP及端口，如：118.96.72.54:8668')
     parser.add_argument('-f', '--force', action='store_true', default=False,
-                        help='当下载文件存在时是否跳过询问直接覆盖')
+                        help='是否强制覆盖已下载文件')
     parser.add_argument('-c', '--complete', action='store_true', default=False,
-                        help='当下载文件存在时是否跳过询问直接覆盖')
+                        help='是否完整打印日志')
     args = parser.parse_args()
     print(args)
     return args.__dict__
@@ -50,65 +53,79 @@ class pywget(pywget_funcs):
             #                                else self._size - 1)
             self._headers.update(headers_range)
 
+    def __deal_file__(self):
+        if os.path.exists(self.local_filename):
+            local_filename_size = os.path.getsize(self.local_filename)
+            if self._stat:
+                # 判断缓存文件是否存在
+                try:
+                    with open(self.tmp_filename, 'rb') as fin:
+                        self._size = int(fin.read())
+                except Exception:
+                    print('获取已下载字节数报错，已重置下载文件')
+                    self.__touch__(self.local_filename)
+                    self.__touch__(self.tmp_filename)
+            elif (local_filename_size > 0) and \
+                    (self._size_total == 0 or local_filename_size == self._size_total):
+                # 判断下载的文件长度是否完全
+                if not self.force:
+                    print('下载文件已存在，%s' % self.local_filename)
+                    print('请求返回文件字节数，为:', self._size_total)
+                    print('本地文件大小字节数，为:', local_filename_size)
+                    print('已跳过下载')
+                    return 1
+                    # try:
+                    #     if input('是否覆盖文件？(回车-->覆盖，任意字符串退出)：'):
+                    #         sys.exit(1)
+                    # except OSError:
+                self.__touch__(self.local_filename)
+                self.__touch__(self.tmp_filename)
+            else:  # 否则重建文件
+                self.__touch__(self.local_filename)
+                self.__touch__(self.tmp_filename)
+        return 0
+
     def download(self):
         '''主程序'''
         # 1) 文件准备
         finished = False
         print('Download start:')
         print('[url]:', self._url)
-        url, filename, force, block = self._url, self.filename, self.force, self._block
-        if not filename:
-            filename = self.__remove_nonchars__(url.split('/')[-1].split('?')[0])
-        local_filename = self.__remove_nonchars__(filename)
-        tmp_filename = local_filename + '.downtmp'
-        self.local_filename, self.tmp_filename = local_filename, tmp_filename
-
-        # 此处应该判断文件大小是否完整
-        stat = self.__support_continue__(url)  # 如果支持断点续传
-        if os.path.exists(local_filename):
-            if stat:
-                # 判断缓存文件是否存在
-                try:
-                    with open(tmp_filename, 'rb') as fin:
-                        self._size = int(fin.read())
-                except Exception:
-                    print('获取已下载字节数报错，已重置下载文件')
-                    self.__touch__(local_filename)
-                    self.__touch__(tmp_filename)
-            elif os.path.getsize(local_filename) == self._size_total:
-                # 判断下载的文件长度是否完全
-                if not force:
-                    print('下载文件已存在，%s' % local_filename)
-                    print('请求返回字节数与文件大小相等，为:', self._size_total)
-                    print('已跳过下载')
-                    return
-                    # try:
-                    #     if input('是否覆盖文件？(回车-->覆盖，任意字符串退出)：'):
-                    #         sys.exit(1)
-                    # except OSError:
-                self.__touch__(local_filename)
-                self.__touch__(tmp_filename)
-        else:  # 否则重建文件
-            self.__touch__(local_filename)
-            self.__touch__(tmp_filename)
+        if not self.filename:
+            self.filename = self.__remove_nonchars__(
+                self._url.split('/')[-1].split('?')[0])
+        self.local_filename = self.__remove_nonchars__(self.filename)
+        self.tmp_filename = self.local_filename + '.downtmp'
 
         # 2) 请求开始
         try:
             if not self._sock:
-                self.__support_continue_do__(self.__support_continue__(url))
-                r = requests.get(self._url, stream=True, verify=False, headers=self._headers)
-                iters = r.iter_content(chunk_size=block)
+                # 此处应该判断文件大小是否完整
+                self._stat = self.__support_continue__(self._url)  # 如果支持断点续传
+                stat_download = self.__deal_file__()  # 处理文件
+                if stat_download:
+                    finished = 1
+                    return
+                self.__support_continue_do__(self._stat)  # 升级headers
+                r = self.__getRequests__(self._url)
+                print('最终请求网址：', r.url)
+                iters = r.iter_content(chunk_size=self._block)
             else:
                 self.__do_recv__()
+                stat_download = self.__deal_file__()  # 处理文件
+                if stat_download:
+                    finished = 1
+                    return
                 iters = self.__do_recv2__()
             print("Downloading...")
             if self._size_total > 0:
-                print("[+] Size: %s" % self.__getsize__(self._size_total - self._size))
+                print("[+] Size: %s" %
+                      self.__getsize__(self._size_total - self._size))
             else:
                 print("[+] Size: None")
             self._size2 = self._size  # 记录此时获得了多少数据
             _size2_last = self._size2
-            with open(local_filename, 'ab+') as f:
+            with open(self.local_filename, 'ab+') as f:
                 f.seek(self._size if self._size == 0 else self._size - 1)
                 f.truncate()
                 n = 0.1
@@ -120,25 +137,31 @@ class pywget(pywget_funcs):
                         f.flush()
                         self._size2 += len(chunk)
                         # print(size, self._size_total, n)
-                        do = 0
-                        if self._size2 / self._size_total > n:
-                            n += 0.05
-                            do = 1
-                        elif (self._size2 - _size2_last) // (10 * 1024 ** 2):
-                            do = 1
-                        if do and (time.time() - t0 > 0.5):
-                            sys.stdout.write('Now: %s, Total: %s, Download Speed: %s%s' % (
+                        # if self._size_total > 0:
+                        #     do = 0
+                        #     if self._size2 / self._size_total > n:
+                        #         n += 0.05
+                        #         do = 1
+                        #     elif (self._size2 - _size2_last) // (10 * 1024 ** 2):
+                        #         do = 1
+                        # if do and (time.time() - t0 > 0.5):
+                        if time.time() - t0 > 0.5:
+                            sys.stdout.write('Now: %s, Total: %s, Download Speed: %s/s        %s' % (
                                 self.__getsize__(self._size2),
                                 self.__getsize__(self._size_total),
-                                '%-11s' % ('%s/s' % self.__getsize__(
-                                    (self._size2 - _size2_last) / (time.time() - t0))),
+                                (self.__getsize__((self._size2 - _size2_last) / (time.time() - t0))),
                                 self._speed_end))
                             sys.stdout.flush()
                             t0 = time.time()
                             _size2_last = self._size2
-                if self._size_total == self._size2:
+                print('')
+                if self._size_total == 0:
                     finished = True
-                    os.remove(tmp_filename)
+                    print('WARNING, 由于请求下载的字节数未知，请核对下载文件是否完整')
+                elif self._size_total == self._size2:
+                    finished = True
+                if finished == True:
+                    os.remove(self.tmp_filename)
                     time_spend = datetime.datetime.now() - time_start
                     speed_tmp = self.__getsize__(self._size2 - self._size)
                     speed = float(speed_tmp[:-1]) / (
@@ -148,7 +171,8 @@ class pywget(pywget_funcs):
                             time_spend, speed, speed_tmp[-1]))
                     sys.stdout.flush()
                 else:
-                    print('WARNING, 下载可能未完成，已下载(b)/总下载(b)：', self._size2, '/', self._size_total)
+                    print('WARNING, 下载可能未完成，已下载(b)/总下载(b)：',
+                          self._size2, '/', self._size_total)
         except KeyboardInterrupt:
             print('\n程序终止')
         except Exception:
@@ -156,7 +180,7 @@ class pywget(pywget_funcs):
             traceback.print_exc()
         finally:
             if not finished:
-                with open(tmp_filename, 'w') as tmp:
+                with open(self.tmp_filename, 'w') as tmp:
                     tmp.write(str(self._size2))
                 print("\nDownload pause.\n")
                 raise

@@ -73,8 +73,8 @@ class pywgetServer(pywget_funcs):
                     self.__mysend__(str(self._size_total).encode('utf-8'))
 
                     # 4) 请求下载
-                    r = requests.get(url, stream=True, headers=headers)
-
+                    # r = requests.get(url, stream=True, headers=headers)
+                    r = self.__getRequests__(url)
                     t0 = time.time()
                     allsize = 0
                     chunk_size = 1024*100
