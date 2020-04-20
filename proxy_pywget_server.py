@@ -35,14 +35,14 @@ class pywgetServer(pywget_funcs):
 
     def __getsocket__(self, proxy):
         '''创建套接字，创建链接，创建父子进程　功能函数调用'''
-        print('Run in', proxy)
         HOST, PORT = proxy.split(':')
         ADDR = (HOST, int(PORT))
         # ADDR = ('0.0.0.0', 8080)  # server address
         # 创建tcp套接字
         s = socket(AF_INET, SOCK_STREAM)
         # 在绑定前调用setsockopt让套接字允许地址重用
-        # s.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+        # s.settimeout(CHECK_TIMEOUT)
+        s.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
         # 绑定
         s.bind(ADDR)
         # 设置监听
@@ -50,9 +50,10 @@ class pywgetServer(pywget_funcs):
         return s
 
     def do_parent(self, proxy):
-        self._sock_s = self.__getsocket__(proxy)
+        print('Run in', proxy)
         while True:
             try:
+                self._sock_s = self.__getsocket__(proxy)
                 self._size_NOW = 0
                 connfd, addr = self._sock_s.accept()
                 self._sock = connfd
@@ -96,8 +97,7 @@ class pywgetServer(pywget_funcs):
                             # print('发送：---->\n', chunk[:30], flush=True, file=sys.stderr)
                         except Exception as e:
                             print('【发送失败】。。')
-                            print('详细错误信息:%s\n' % e,
-                                  traceback.format_exc())
+                            # print('详细错误信息:%s\n' % e, traceback.format_exc())
                             # try:
                             #     connfd.send(
                             #         ("[Download Failed]" % str(e)).encode())
@@ -149,9 +149,10 @@ class pywgetServer(pywget_funcs):
                 # except Exception as e2:
                 #     print('发送[Download Filed]失败', e2)#, file=fo)
                 print('详细错误信息:\n', traceback.format_exc(), '\n服务已重启')
-                time.sleep(2)
             finally:
+                self._sock_s.close()
                 connfd.close()
+                time.sleep(2)
 
 
 def main():
