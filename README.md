@@ -16,19 +16,29 @@ git clone https://github.com/wan230114/pywget.git
 * 目前无法对ftp网址协议传输的文件进行下载及转发，日后需要跟进改进
 
 ### Example:
+
 （服务端与客户端可在两台计算机分别运行）
+
+运行示例：
 ```bash
-# sh run_server.sh  # 启动服务端
-python3 proxy_wget_server.py  # 启动服务端
 
-# sh run_client.sh  # 客户端通过代理运行示例（-p参数网址为服务端所在IP，如果公网IP可用，可以直接使用公网IP）
+# 1) 本地下载
+python3 pywget.py http://118.89.194.65/genome.gff3.idx
+# 下载指定网址名称，自动命令
+python3 pywget.py https://www.baidu.com
+# 下载百度首页，命名为test_baidu.html
+python3 pywget.py https://www.baidu.com -o test_baidu.html
+# 当文件存在时强制覆盖
+python3 pywget.py https://www.baidu.com -o test_baidu.html -f
+
+# 2) 使用代理转发下载，需要提前运行服务端
+# 客户端通过代理运行示例（-p参数网址为服务端所在IP）
+# 如果公网IP可用，可以改掉127.0.0.1直接使用运行服务端的公网IP
 python3 pywget.py http://118.89.194.65/genome.gff3.idx -p 127.0.0.1:8080 -f
-
-# sh run-test.sh    # 运行示例
-python3 pywget.py http://118.89.194.65/genome.gff3.idx  # 下载指定网址名称
-python3 pywget.py https://www.baidu.com                 # 下载百度首页
-python3 pywget.py https://www.baidu.com -o test.html     # 自定义下载文件名
-python3 pywget.py https://www.baidu.com -o test.html -f  # 当文件存在时强制覆盖
-python3 pywget.py https://www.baidu.com -o test.html -f -p 127.0.0.1:8080  # 使用代理转发下载
+python3 pywget.py https://www.baidu.com -o test_baidu.html -f -p 127.0.0.1:8080
 ```
 
+服务端的运行：
+```bash
+python3 ./proxy_pywget_server.py
+```
