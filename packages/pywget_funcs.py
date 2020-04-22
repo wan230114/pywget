@@ -9,7 +9,7 @@ import time
 import requests
 import json
 import struct
-from socket import *
+import socket
 
 
 class pywget_funcs:
@@ -53,13 +53,15 @@ class pywget_funcs:
 
     def __support_continue__(self, url):
         '''测试断点续传，返回数字0或1'''
-        r = self.__get_Requests__(url, headers=self._headers_copy)
+        r = self.__get_Requests__(url, method='head',
+                                  headers=self._headers_copy)
         # print('断点续传测试', r.headers)
         try:
             if 'Content-Length' in r.headers:
                 self._size_total = int(r.headers['Content-Length'])
             elif 'content-length' in r.headers:
                 self._size_total = int(r.headers['content-length'])
+            print('获取到文件长度:', self._size_total)
             return 1
         except Exception:
             try:
@@ -68,7 +70,6 @@ class pywget_funcs:
                     re.match(r'^bytes 0-\d+/(\d+)$', crange).group(1))
             except Exception:
                 self._size_total = 0
-        print('获取到文件长度:', self._size_total)
         return 0
 
     def __support_continue_do__(self, stat, size):
@@ -113,7 +114,7 @@ class pywget_funcs:
                          (self._url, getpass.getuser())).encode())
         print(time.strftime("[%Y-%m-%d %H:%M:%S, Content Success]",
                             time.localtime()))
-        print('正在排队...')
+        print('正在请求...')
 
         # 1) 接收断点续传信息和开始信息
         msg = self.__recv_size__(8).decode()
@@ -200,21 +201,22 @@ class pywget_funcs:
         proxy_like: 118.123.21.34:8088'''
         HOST, PORT = proxy.split(':')
         ADDR = (HOST, int(PORT))
-        s = socket()  # tcp套接字创建,默认参数即可
-        setdefaulttimeout(10)  # 设置超时时间
+        s = socket.socket()  # tcp套接字创建,默认参数即可
         time = 3
         for i in range(time):
             try:
                 s.connect(ADDR)
                 break
-            except (ConnectionRefusedError, timeout):
+            except (ConnectionRefusedError, socket.timeout):
                 print(
                     'Warning: Connect Failed. An error has occurred on the server. Please check server.')
                 raise
-        s.setsockopt(SOL_SOCKET, SO_RCVBUF, 0)  # 设置缓冲区
+        # s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 0)  # 设置缓冲区
         return s
 
-    def __get_Requests__(self, url_raw, method='get', headers=None, jumptime=20):
+    def __get_Requests__(self, url_raw, method='get',
+                         headers=None, jumptime=20,
+                         RQTIME=20):
         '''访问并获取iters'''
         from requests.packages.urllib3.exceptions import InsecureRequestWarning
         # 禁用安全请求警告
@@ -225,18 +227,26 @@ class pywget_funcs:
             r_request = requests.head
         if not headers:
             headers = self._headers
-        r = r_request(url_raw, stream=True,
-                      verify=False, headers=headers)
-        # print('返回的headers：', r.headers)
-        n = 0
-        url = url_raw
-        while (url not in r.url) and n < jumptime:
-            n += 1
-            print('第', n, '次跳转 %s --> %s' % (url, r.url))
-            url = r.url
-            r = r_request(url, stream=True,
-                          verify=False, headers=headers)
-            # print('返回的headers：', r.headers)
-        if n >= jumptime:
-            raise Exception('跳转次数大于%s次，请检查请求地址是否正确' % jumptime)
-        return r
+        for i in range(3):
+            try:
+                r = r_request(url_raw, stream=True,
+                              verify=False, headers=headers,
+                              timeout=RQTIME)
+                # print('返回的headers：', r.headers)
+                n = 0
+                url = url_raw
+                while (url not in r.url) and n < jumptime:
+                    n += 1
+                    print('第', n, '次跳转 %s --> %s' % (url, r.url))
+                    url = r.url
+                    r = r_request(url, stream=True,
+                                  verify=False, headers=headers,
+                                  timeout=RQTIME)
+                    # print('返回的headers：', r.headers)
+                if n >= jumptime:
+                    raise Exception('跳转次数大于%s次，请检查请求地址是否正确' % jumptime)
+                return r
+            except requests.exceptions.ReadTimeout:
+                print('Time out. Retring %d times.' % (i+1))
+        else:
+            raise

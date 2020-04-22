@@ -42,7 +42,7 @@ class pywget(pywget_funcs):
         self.finished = False
         self._size_NOW = self._size  # 记录此时获得了多少数据
         # 创建共享内存，[开始, 结束, 计算速度, 存储当前大小]
-        self._shm = Array('i', [0, 0, 0, self._size_NOW])
+        self._shm = Array('i', [0, 0, 0, self._size_NOW, self._size_total])
 
     def jg_isexits(self):
         """通过标准输入来判断是否覆盖原文件"""
@@ -59,20 +59,20 @@ class pywget(pywget_funcs):
         try:
             _size2_last = list(self._shm)[2]
             while True:
-                start, end, isrun, _size_NOW = self._shm
+                start, end, isrun, _size_NOW, _size_total = self._shm
                 if end:
                     break
                 if start and isrun:
                     speed = (_size_NOW - _size2_last) / 0.5
-                    if speed > 0 and self._size_total > 0:
+                    if speed > 0 and _size_total > 0:
                         seconds = datetime.timedelta(
-                            seconds=(self._size_total - _size_NOW) / speed)
+                            seconds=(_size_total - _size_NOW) / speed)
                     else:
                         seconds = '[Not sure]......     '
                     sys.stdout.write(
                         'Now: %8s, Total: %8s, Download Speed: %8s/s  in %s   %s' % (
                             self.__getsize__(_size_NOW),
-                            self.__getsize__(self._size_total),
+                            self.__getsize__(_size_total),
                             self.__getsize__(speed),
                             seconds,
                             self._speed_end))
@@ -160,15 +160,30 @@ class pywget(pywget_funcs):
             self._shm[0] = 0
             # 1) 请求开始前，准备工作
             if self._is_sock:
-                self._sock = self.__s_Connect__(self._proxy)
-                self.__do_recv__()
+                for i in range(3):
+                    try:
+                        self._sock = self.__s_Connect__(self._proxy)
+                        self.__do_recv__()
+                    except ConnectionRefusedError:
+                        print('连接出错', end='')
+                        print('，正在重试%d(3)次' % (i+1))
+                    except AssertionError:
+                        print('接收失败', end='')
+                        print('，正在重试%d(3)次' % (i+1))
+                    else:
+                        break
+                    finally:
+                        time.sleep(1)
             else:
                 # 判断断点续传
                 self._stat = self.__support_continue__(self._url)
-            # 2) 看文件是否已经下载完成
+            self._shm[4] = self._size_total
+            # 2) 看文件是否已经下载完成（需要 断点续传）
             if checkfile and self.__deal_file__():
                 self.finished = True
                 return
+            else:
+                self._size_NOW = self._size
             # 3) 获取请求数据的迭代对象
             self._iters = self.__getIter__(self._size_NOW)
             print("Downloading...")
@@ -185,13 +200,13 @@ class pywget(pywget_funcs):
                 f.seek(self._size_NOW)
                 f.truncate()
                 time_start = datetime.datetime.now()
-                self._shm[0], self._shm[2] = 1, 1
+                self._shm[0] = 1
                 for chunk in self._iters:
                     if chunk:
                         f.write(chunk)
                         f.flush()
                         self._size_NOW += len(chunk)
-                        self._shm[3] = self._size_NOW
+                        self._shm[2], self._shm[3] = 1, self._size_NOW
                 # input()
                 # if self.__tmp__ == 0:
                 #     sys.exit()

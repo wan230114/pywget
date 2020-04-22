@@ -12,6 +12,7 @@ import time
 import traceback
 import re
 import json
+import struct
 from packages.pywget_funcs import pywget_funcs
 
 
@@ -33,31 +34,41 @@ def print(*args, **kwargs):
 
 class pywgetServer(pywget_funcs):
 
-    def __getsocket__(self, proxy, CHECK_TIMEOUT=30):
+    def __s_getsocket__(self, proxy, CHECK_TIMEOUT=30):
         '''创建套接字，创建链接，创建父子进程　功能函数调用'''
         HOST, PORT = proxy.split(':')
         # ADDR = ('0.0.0.0', 8080)  # server address
         ADDR = (HOST, int(PORT))
         # 创建tcp套接字
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # 在绑定前调用setsockopt让套接字允许地址重用
+
         s.settimeout(CHECK_TIMEOUT)
+        # self.test_t0 = time.time()  # 时间测试
+        # socket.setdefaulttimeout(10)  # 设置超时时间
+
+        # 在绑定前调用setsockopt让套接字允许地址重用
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         # 绑定
         s.bind(ADDR)
         # 设置监听
         s.listen(5)
+        # s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 0)  # 设置缓冲区
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDTIMEO,
+                     struct.pack("ll", 5, 0))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVTIMEO,
+                     struct.pack("ll", 5, 0))
         return s
 
     def do_parent(self, proxy):
         print('Run in', proxy)
         while True:
             try:
-                self._sock_s = self.__getsocket__(proxy)
+                self._sock_s = self.__s_getsocket__(proxy)
                 self._size_NOW = 0
                 connfd = None
                 connfd, addr = self._sock_s.accept()
                 self._sock = connfd
+                self._sock.settimeout(10)
                 # 0) 接收请求
                 msg = connfd.recv(10)
                 if msg.startswith(b'[send-url]'):
@@ -69,10 +80,13 @@ class pywgetServer(pywget_funcs):
                     print('收到url请求: ', msg, '\n转发中:', url, who)
 
                     # 1) 发送是否可以续传和开始信息
+                    print('step: 0 ', end='')
                     stat = self.__support_continue__(url)
+                    print('> 1 ', end='')
                     connfd.send(('%s[start]' % stat).encode('utf-8'))
 
                     # 2) 接收网页请求头
+                    print('> 2 ', end='')
                     self._headers = json.loads(self.__myrecv__())
                     if stat and self._headers.get('Range', 0):
                         # 此时传输大小size
@@ -82,23 +96,25 @@ class pywgetServer(pywget_funcs):
                         size = 0
 
                     # 3) 发送下载文件长度
+                    print('> 3 ', end='')
                     self.__mysend__(str(self._size_total).encode('utf-8'))
 
                     # 4) 请求下载
-                    # r = requests.get(url, stream=True, headers=headers)
                     r = self.__get_Requests__(url)
                     t0 = time.time()
                     allsize = 0
-                    chunk_size = 1024*100
+                    chunk_size = 1024*10
+                    print('> 4 ', end='')
                     for chunk in r.iter_content(chunk_size=chunk_size):
                         allsize += len(chunk)
                         try:
-                            # print('发送：---->\n', chunk[:30], flush=True, file=sys.stderr)
                             self.__mysend__(chunk)
                         except Exception:
                             # print('详细错误信息:%s\n' % e, traceback.format_exc())
                             print('【发送失败】。。')
                             break
+                    else:
+                        print('> 5 ', end='')
                     if (size + int(allsize)) >= int(self._size_total):
                         # print('sending [ok]...')
                         connfd.send('[ok]'.encode())
@@ -108,8 +124,9 @@ class pywgetServer(pywget_funcs):
                     else:
                         connfd.send(b'[FL]')
                         print('WARNING: 转发未成功, ', end='')
-                    print('传输: %s --- [+ %s] ---> %s / %s' % (
-                        size, allsize, size + int(allsize), int(self._size_total)))
+                    print('传输: %s --- [+ %s] ---> %s all:%s()' % (
+                        size, allsize, size + int(allsize),
+                        self._size_total, self.__getsize__(self._size_total)))
                     connfd.close()
                     print('Connect closed\n')
                 elif msg == b"[close]1234567":
@@ -136,6 +153,7 @@ class pywgetServer(pywget_funcs):
                 print('服务已终止!')
                 break
             except socket.timeout:
+                # print('经过了', time.time() - self.test_t0)
                 pass
             except Exception:
                 # with open('log-conman', 'a', buffering=1) as fo:
