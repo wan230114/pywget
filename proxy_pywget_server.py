@@ -6,7 +6,7 @@
 # @Last Modified by:   11701
 # @Last Modified time: 2019-09-11 23:40:35
 
-from socket import *
+import socket
 import argparse
 import time
 import traceback
@@ -33,16 +33,16 @@ def print(*args, **kwargs):
 
 class pywgetServer(pywget_funcs):
 
-    def __getsocket__(self, proxy):
+    def __getsocket__(self, proxy, CHECK_TIMEOUT=30):
         '''创建套接字，创建链接，创建父子进程　功能函数调用'''
         HOST, PORT = proxy.split(':')
-        ADDR = (HOST, int(PORT))
         # ADDR = ('0.0.0.0', 8080)  # server address
+        ADDR = (HOST, int(PORT))
         # 创建tcp套接字
-        s = socket(AF_INET, SOCK_STREAM)
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # 在绑定前调用setsockopt让套接字允许地址重用
-        # s.settimeout(CHECK_TIMEOUT)
-        s.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+        s.settimeout(CHECK_TIMEOUT)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         # 绑定
         s.bind(ADDR)
         # 设置监听
@@ -55,6 +55,7 @@ class pywgetServer(pywget_funcs):
             try:
                 self._sock_s = self.__getsocket__(proxy)
                 self._size_NOW = 0
+                connfd = None
                 connfd, addr = self._sock_s.accept()
                 self._sock = connfd
                 # 0) 接收请求
@@ -134,7 +135,9 @@ class pywgetServer(pywget_funcs):
             except KeyboardInterrupt:
                 print('服务已终止!')
                 break
-            except Exception as e:
+            except socket.timeout:
+                pass
+            except Exception:
                 # with open('log-conman', 'a', buffering=1) as fo:
                 # print('额，遇到点问题，错误信息是:', e)#, file=fo)
                 # try:
@@ -145,8 +148,9 @@ class pywgetServer(pywget_funcs):
                 print('详细错误信息:\n', traceback.format_exc(), '\n服务已重启')
             finally:
                 self._sock_s.close()
-                connfd.close()
-                time.sleep(2)
+                if connfd:
+                    connfd.close()
+                time.sleep(1)
 
 
 def main():
