@@ -69,7 +69,6 @@ class pywgetServer(pywget_funcs):
 
                     # 1) 发送是否可以续传和开始信息
                     stat = self.__support_continue__(url)
-                    total_size = self._size_total
                     connfd.send(('%s[start]' % stat).encode('utf-8'))
 
                     # 2) 接收网页请求头
@@ -93,28 +92,23 @@ class pywgetServer(pywget_funcs):
                     for chunk in r.iter_content(chunk_size=chunk_size):
                         allsize += len(chunk)
                         try:
-                            self.__mysend__(chunk)
                             # print('发送：---->\n', chunk[:30], flush=True, file=sys.stderr)
-                        except Exception as e:
-                            print('【发送失败】。。')
+                            self.__mysend__(chunk)
+                        except Exception:
                             # print('详细错误信息:%s\n' % e, traceback.format_exc())
-                            # try:
-                            #     connfd.send(
-                            #         ("[Download Failed]" % str(e)).encode())
-                            # except Exception:
-                            #     print('send [Download Failed] failed')#, file=fo)
+                            print('【发送失败】。。')
                             break
-                    if (size + int(allsize)) >= int(total_size):
+                    if (size + int(allsize)) >= int(self._size_total):
                         # print('sending [ok]...')
                         connfd.send('[ok]'.encode())
                         print('sened[ok],耗时%.3fs,传输%s/%s' % (
-                            (time.time() - t0), allsize, total_size))
+                            (time.time() - t0), allsize, self._size_total))
                         print('Success. 转发成功, ', end='')
                     else:
                         connfd.send(b'[FL]')
                         print('WARNING: 转发未成功, ', end='')
                     print('传输: %s --- [+ %s] ---> %s / %s' % (
-                        size, allsize, size + int(allsize), int(total_size)))
+                        size, allsize, size + int(allsize), int(self._size_total)))
                     connfd.close()
                     print('Connect closed\n')
                 elif msg == b"[close]1234567":

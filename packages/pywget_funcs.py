@@ -53,7 +53,7 @@ class pywget_funcs:
 
     def __support_continue__(self, url):
         '''测试断点续传，返回数字0或1'''
-        r = requests.head(url, headers=self._headers_copy)
+        r = self.__get_Requests__(url, headers=self._headers_copy)
         # print('断点续传测试', r.headers)
         try:
             if 'Content-Length' in r.headers:
@@ -136,7 +136,7 @@ class pywget_funcs:
         print('[文件接收状态:', self._size_NOW, '/', self._size_total,
               self.__getsize__(self._size_total), ']')
 
-    def __do_recv2__(self):
+    def __recv_data__(self):
         '''传输下载的生成器'''
         # n = 0
         t0 = time.time()
@@ -214,22 +214,29 @@ class pywget_funcs:
         s.setsockopt(SOL_SOCKET, SO_RCVBUF, 0)  # 设置缓冲区
         return s
 
-    def __get_Requests__(self, url_raw):
+    def __get_Requests__(self, url_raw, method='get', headers=None, jumptime=20):
         '''访问并获取iters'''
         from requests.packages.urllib3.exceptions import InsecureRequestWarning
         # 禁用安全请求警告
         requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-        # print('请求的headers：', self._headers)
-        r = requests.get(url_raw, stream=True,
-                         verify=False, headers=self._headers)
+        if method == 'get':
+            r_request = requests.get
+        elif method == 'head':
+            r_request = requests.head
+        if not headers:
+            headers = self._headers
+        r = r_request(url_raw, stream=True,
+                      verify=False, headers=headers)
+        # print('返回的headers：', r.headers)
         n = 0
         url = url_raw
-        while (url not in r.url) and n < 20:
+        while (url not in r.url) and n < jumptime:
             n += 1
+            print('第', n, '次跳转 %s --> %s' % (url, r.url))
             url = r.url
-            print('第', n, '次跳转', self._url, r.url)
-            r = requests.get(url, stream=True,
-                             verify=False, headers=self._headers)
-        if n >= 20:
-            raise Exception('跳转次数大于20次，请检查请求地址是否正确')
+            r = r_request(url, stream=True,
+                          verify=False, headers=headers)
+            # print('返回的headers：', r.headers)
+        if n >= jumptime:
+            raise Exception('跳转次数大于%s次，请检查请求地址是否正确' % jumptime)
         return r

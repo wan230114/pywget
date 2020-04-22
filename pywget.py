@@ -12,6 +12,7 @@ import argparse
 import datetime
 import time
 from packages.pywget_funcs import pywget_funcs
+from multiprocessing import Process, Array
 
 
 def fargv():
@@ -40,6 +41,8 @@ class pywget(pywget_funcs):
         super().__init__(config=config)
         self.finished = False
         self._size_NOW = self._size  # 记录此时获得了多少数据
+        # 创建共享内存，[是否已经开始，是否计算速度，当前大小]
+        self._shm = Array('i', [0, 0, self._size_NOW])
 
     def jg_isexits(self):
         """通过标准输入来判断是否覆盖原文件"""
@@ -49,6 +52,37 @@ class pywget(pywget_funcs):
                 return True
             elif a == "n":
                 return False
+
+    def show_speed(self):
+        """使用子进程显示下载速度"""
+        # print('开启子进程')
+        try:
+            _size2_last = list(self._shm)[2]
+            while True:
+                start, isrun, _size_NOW = self._shm
+                # print('start, isrun, _size_NOW:', start, isrun, _size_NOW)
+                if start and not isrun:
+                    # print('')
+                    break
+                speed = (_size_NOW - _size2_last) / 0.5
+                if speed > 0 and self._size_total > 0:
+                    seconds = datetime.timedelta(
+                        seconds=(self._size_total - _size_NOW) / speed)
+                else:
+                    seconds = '[Not sure]......     '
+                sys.stdout.write(
+                    'Now: %8s, Total: %8s, Download Speed: %8s/s  in %s   %s' % (
+                        self.__getsize__(_size_NOW),
+                        self.__getsize__(self._size_total),
+                        self.__getsize__(speed),
+                        seconds,
+                        self._speed_end))
+                sys.stdout.flush()
+                _size2_last = _size_NOW
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            print('')  # 终止时加一个\n
+        # print('关闭子进程')
 
     def __deal_file__(self):
         """
@@ -93,7 +127,7 @@ class pywget(pywget_funcs):
             print('最终请求网址：', r.url)
             return r.iter_content(chunk_size=self._block)
         else:
-            return self.__do_recv2__()
+            return self.__recv_data__()
 
     def download(self):
         '''主程序'''
@@ -132,86 +166,82 @@ class pywget(pywget_funcs):
                 self.finished = True
                 return
             # 3) 获取请求数据的迭代对象
+            p = Process(target=self.show_speed)
+            p.start()
             self._iters = self.__getIter__(self._size_NOW)
             print("Downloading...")
             if self._size_total > 0:
                 size_need = self._size_total - self._size_NOW
-                print("[+] Size: %s(%s)" % (
-                    size_need, self.__getsize__(size_need)))
+                print('[Size]:', self._size_NOW,
+                      '-- [+%d] --> %d(%s)' % (
+                          size_need, self._size_total,
+                          self.__getsize__(size_need)))
             else:
-                print("[+] Size: None")
+                print("[Size]: None")
             _size_NOW_copy = self._size_NOW
-            _size2_last = self._size_NOW
             with open(self.local_filename, 'ab+') as f:
                 f.seek(self._size_NOW)
                 f.truncate()
                 time_start = datetime.datetime.now()
-                t0 = time.time()
                 for chunk in self._iters:
                     if chunk:
                         f.write(chunk)
                         f.flush()
                         self._size_NOW += len(chunk)
-                        if time.time() - t0 > 0.5:
-                            sys.stdout.write('Now: %s, Total: %s, Download Speed: %s/s        %s' % (
-                                self.__getsize__(self._size_NOW),
-                                self.__getsize__(self._size_total),
-                                (self.__getsize__(
-                                    (self._size_NOW - _size2_last) / (time.time() - t0))),
-                                self._speed_end))
-                            sys.stdout.flush()
-                            t0 = time.time()
-                            _size2_last = self._size_NOW
-                # print('self._size_NOW, _size2_last :',
-                #       self._size_NOW, _size2_last)
+                        self._shm[0], self._shm[1], self._shm[2] = \
+                            1, 1, self._size_NOW
                 # input()
                 # if self.__tmp__ == 0:
                 #     sys.exit()
                 # else:
                 #     self.__tmp__ += 1
-                print('')
-                if self._size_total <= self._size_NOW:
-                    self.finished = True
-                    if self._size_total == 0:
-                        print('WARNING, 由于请求下载的字节数未知，请核对下载文件是否完整')
-                    elif os.path.exists(self.tmp_filename):
-                        os.remove(self.tmp_filename)
-                    time_spend = datetime.datetime.now() - time_start
-                    speed_tmp = self.__getsize__(
-                        self._size_NOW - _size_NOW_copy)
-                    # print(speed_tmp, time_spend.total_seconds())
-                    speed = float(speed_tmp[:-1]) / (
-                        time_spend.total_seconds() if time_spend.total_seconds() else 1)
-                    sys.stdout.write(
-                        '[Download Finished]!\n[Total Time]: '
-                        '%s\n[Download Speed]: %.3f %sb/s\n' % (
-                            time_spend, speed, speed_tmp[-1]))
-                    sys.stdout.flush()
-                    if self._size_NOW > self._size_total:
-                        print('WARNING, 下载可能有问题', end='')
-                    print('已下载(b)/总字节数(b)：',
-                          self._size_NOW, '/', self._size_total,
-                          ' %.3f%%' % (self._size_NOW/self._size_total*100))
-                elif self._stat:  # 重试连接
-                    time.sleep(1)
-                    if self._RetryTime == 0:
-                        self.download_start(0)
-                    elif self._RetryTime_tmp > 0:
-                        self._RetryTime_tmp -= 1
-                        print('下载中断，正在断点续传，正在进行第%d(%d)次重试' % (
-                            self._RetryTime - self._RetryTime_tmp,
-                            self._RetryTime))
-                        self.download_start(0)
-                    else:
-                        print('已达到重试次数：', self._RetryTime)
+            self._shm[1] = 0
+            p.join()
+            if self._size_total <= self._size_NOW:
+                self.finished = True
+                if self._size_total == 0:
+                    print('WARNING, 由于请求下载的字节数未知，请核对下载文件是否完整')
+                elif os.path.exists(self.tmp_filename):
+                    os.remove(self.tmp_filename)
+                time_spend = datetime.datetime.now() - time_start
+                speed_tmp = self.__getsize__(
+                    self._size_NOW - _size_NOW_copy)
+                speed = float(speed_tmp[:-1]) / (
+                    time_spend.total_seconds() if time_spend.total_seconds() else 1)
+                sys.stdout.write(
+                    '[Download Finished]!\n[Total Time]: '
+                    '%s\n[Download Speed]: %.3f %sb/s\n' % (
+                        time_spend, speed, speed_tmp[-1]))
+                sys.stdout.flush()
+                if self._size_NOW > self._size_total:
+                    print('WARNING, 下载可能有问题', end='')
+                if self._size_total:
+                    comp_ = ' %.3f%%' % (self._size_NOW/self._size_total*100)
+                else:
+                    comp_ = ''
+                print('已下载(b)/总字节数(b)：',
+                      self._size_NOW, '/', self._size_total, comp_)
+            elif self._stat:  # 重试连接
+                time.sleep(1)
+                if self._RetryTime == 0:
+                    self.download_start(0)
+                elif self._RetryTime_tmp > 0:
+                    self._RetryTime_tmp -= 1
+                    print('\n下载中断，正在断点续传，正在进行第%d(%d)次重试' % (
+                        self._RetryTime - self._RetryTime_tmp,
+                        self._RetryTime))
+                    self.download_start(0)
+                else:
+                    print('已达到重试次数：', self._RetryTime)
         except KeyboardInterrupt:
-            print('\n程序终止')
+            print('\n\n程序终止')
         except Exception:
             import traceback
             traceback.print_exc()
 
 
 def main():
+    # 创建共享内存，存入列表　
     kwargs = fargv()
     pywget(kwargs).download()
 
