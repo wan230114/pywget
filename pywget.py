@@ -41,8 +41,8 @@ class pywget(pywget_funcs):
         super().__init__(config=config)
         self.finished = False
         self._size_NOW = self._size  # 记录此时获得了多少数据
-        # 创建共享内存，[是否已经开始，是否计算速度，当前大小]
-        self._shm = Array('i', [0, 0, self._size_NOW])
+        # 创建共享内存，[开始, 结束, 计算速度, 存储当前大小]
+        self._shm = Array('i', [0, 0, 0, self._size_NOW])
 
     def jg_isexits(self):
         """通过标准输入来判断是否覆盖原文件"""
@@ -59,26 +59,25 @@ class pywget(pywget_funcs):
         try:
             _size2_last = list(self._shm)[2]
             while True:
-                start, isrun, _size_NOW = self._shm
-                # print('start, isrun, _size_NOW:', start, isrun, _size_NOW)
-                if start and not isrun:
-                    # print('')
+                start, end, isrun, _size_NOW = self._shm
+                if end:
                     break
-                speed = (_size_NOW - _size2_last) / 0.5
-                if speed > 0 and self._size_total > 0:
-                    seconds = datetime.timedelta(
-                        seconds=(self._size_total - _size_NOW) / speed)
-                else:
-                    seconds = '[Not sure]......     '
-                sys.stdout.write(
-                    'Now: %8s, Total: %8s, Download Speed: %8s/s  in %s   %s' % (
-                        self.__getsize__(_size_NOW),
-                        self.__getsize__(self._size_total),
-                        self.__getsize__(speed),
-                        seconds,
-                        self._speed_end))
-                sys.stdout.flush()
-                _size2_last = _size_NOW
+                if start and isrun:
+                    speed = (_size_NOW - _size2_last) / 0.5
+                    if speed > 0 and self._size_total > 0:
+                        seconds = datetime.timedelta(
+                            seconds=(self._size_total - _size_NOW) / speed)
+                    else:
+                        seconds = '[Not sure]......     '
+                    sys.stdout.write(
+                        'Now: %8s, Total: %8s, Download Speed: %8s/s  in %s   %s' % (
+                            self.__getsize__(_size_NOW),
+                            self.__getsize__(self._size_total),
+                            self.__getsize__(speed),
+                            seconds,
+                            self._speed_end))
+                    sys.stdout.flush()
+                    _size2_last = _size_NOW
                 time.sleep(0.5)
         except KeyboardInterrupt:
             print('')  # 终止时加一个\n
@@ -145,7 +144,11 @@ class pywget(pywget_funcs):
 
         self.__tmp__ = 0
 
+        p = Process(target=self.show_speed)
+        p.start()
         self.download_start()
+        self._shm[1] = 1
+        p.join()
         # 处理未完成时结果
         if not self.finished:
             with open(self.tmp_filename, 'w') as tmp:
@@ -154,6 +157,7 @@ class pywget(pywget_funcs):
 
     def download_start(self, checkfile=1):
         try:
+            self._shm[0] = 0
             # 1) 请求开始前，准备工作
             if self._is_sock:
                 self._sock = self.__s_Connect__(self._proxy)
@@ -166,8 +170,6 @@ class pywget(pywget_funcs):
                 self.finished = True
                 return
             # 3) 获取请求数据的迭代对象
-            p = Process(target=self.show_speed)
-            p.start()
             self._iters = self.__getIter__(self._size_NOW)
             print("Downloading...")
             if self._size_total > 0:
@@ -183,20 +185,18 @@ class pywget(pywget_funcs):
                 f.seek(self._size_NOW)
                 f.truncate()
                 time_start = datetime.datetime.now()
+                self._shm[0], self._shm[2] = 1, 1
                 for chunk in self._iters:
                     if chunk:
                         f.write(chunk)
                         f.flush()
                         self._size_NOW += len(chunk)
-                        self._shm[0], self._shm[1], self._shm[2] = \
-                            1, 1, self._size_NOW
+                        self._shm[3] = self._size_NOW
                 # input()
                 # if self.__tmp__ == 0:
                 #     sys.exit()
                 # else:
                 #     self.__tmp__ += 1
-            self._shm[1] = 0
-            p.join()
             if self._size_total <= self._size_NOW:
                 self.finished = True
                 if self._size_total == 0:
@@ -227,7 +227,7 @@ class pywget(pywget_funcs):
                     self.download_start(0)
                 elif self._RetryTime_tmp > 0:
                     self._RetryTime_tmp -= 1
-                    print('\n下载中断，正在断点续传，正在进行第%d(%d)次重试' % (
+                    print('\n\n下载中断，正在断点续传，正在进行第%d(%d)次重试' % (
                         self._RetryTime - self._RetryTime_tmp,
                         self._RetryTime))
                     self.download_start(0)
