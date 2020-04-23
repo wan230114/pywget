@@ -51,3 +51,4 @@ s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVTIMEO,
 
 造成逻辑错误，无法传输字节大小
 
+已解决。传输前发送当前已传输字节大小
