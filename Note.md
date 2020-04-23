@@ -52,3 +52,12 @@ s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVTIMEO,
 造成逻辑错误，无法传输字节大小
 
 已解决。传输前发送当前已传输字节大小
+
+### 2020-04-23周四13:38 发现BUG，当服务端request失败时，服务端无限重试连接，日后再修复吧~
+
+如：
+```python
+python3 pywget.py www.baidu.com -f -p 144.34.179.134:8080 -o 1
+```
+
+已修复

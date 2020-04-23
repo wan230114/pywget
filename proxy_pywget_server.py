@@ -13,7 +13,7 @@ import traceback
 import re
 import json
 import struct
-from packages.pywget_funcs import pywget_funcs
+from packages.pywget_funcs import pywget_funcs, RequestErro
 
 
 def fargv():
@@ -79,10 +79,19 @@ class pywgetServer(pywget_funcs):
                     url, who = re.findall(r'\[send-url\](.*)\[(.*)\]', msg)[0]
                     print('收到url请求: ', msg, '\n转发中:', url, who)
 
-                    # 1) 发送是否可以续传和开始信息
+                    # 1) 发送请求状态，是否可以续传，开始信息
                     print('step: 0 ', end='')
-                    stat = self.__support_continue__(url)
+                    # 请求状态
+                    try:
+                        stat = self.__support_continue__(url)
+                        connfd.send(b'[OK]')
+                    except RequestErro as e:
+                        connfd.send(b'[ER]')
+                        e = str(e)
+                        self.__mysend__(e.encode('utf-8'))
+                        raise RequestErro(e)
                     print('> 1 ', end='')
+                    # 续传和开始信息
                     connfd.send(('%s[start]' % stat).encode('utf-8'))
 
                     # 2) 接收网页请求头
@@ -93,7 +102,7 @@ class pywgetServer(pywget_funcs):
                     print('> 3 ', end='')
                     self.__mysend__(str(self._size_total).encode('utf-8'))
 
-                    # 4) 请求下载
+                    # 4) 升级报头
                     print('> 4 ', end='')
                     if stat:
                         _size = int(json.loads(self.__myrecv__()))
@@ -106,6 +115,7 @@ class pywgetServer(pywget_funcs):
                     t0 = time.time()
                     _size_chunk = 0
                     chunk_size = 1024*10
+                    # 正式转发下载
                     print('>> %s(%s) --> %s(%s)' % (
                         _size, self.__getsize__(_size),
                         self._size_total, self.__getsize__(self._size_total)))
@@ -158,6 +168,8 @@ class pywgetServer(pywget_funcs):
             except socket.timeout:
                 # print('经过了', time.time() - self.test_t0)
                 pass
+            except RequestErro as e:
+                print('\n请求失败 MissingSchema:', e, '\n\n服务已重启')
             except Exception:
                 # with open('log-conman', 'a', buffering=1) as fo:
                 # print('额，遇到点问题，错误信息是:', e)#, file=fo)

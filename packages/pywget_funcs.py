@@ -12,6 +12,11 @@ import struct
 import socket
 
 
+class RequestErro(Exception):
+    """自定义请求错误"""
+    pass
+
+
 class pywget_funcs:
     '''
     base funcs
@@ -115,6 +120,12 @@ class pywget_funcs:
         print('正在排队...')
 
         # 1) 接收断点续传信息和开始信息
+        msg = self.__recv_size__(4).decode()
+        if msg == '[OK]':
+            print('请求成功')
+        elif msg == '[ER]':
+            e = self.__myrecv__().decode()
+            raise RequestErro(e)
         msg = self.__recv_size__(8).decode()
         if int(msg[0]):
             self._stat = 1
@@ -252,5 +263,7 @@ class pywget_funcs:
                 return r
             except requests.ConnectTimeout:
                 print('Time out. Retring %d times.' % (i+1))
+            except requests.exceptions.MissingSchema as e:
+                raise RequestErro(e)
         else:
             raise

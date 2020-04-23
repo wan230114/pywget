@@ -11,7 +11,7 @@ import sys
 import argparse
 import datetime
 import time
-from packages.pywget_funcs import pywget_funcs
+from packages.pywget_funcs import pywget_funcs, RequestErro
 from multiprocessing import Process, Array
 
 
@@ -165,7 +165,7 @@ class pywget(pywget_funcs):
                 while True:
                     i += 1
                     if self._RetryTime_tmp2 == 0:
-                        print('连接出错')
+                        print('连接出错!')
                         raise
                     elif self._RetryTime_tmp2 > 0:
                         self._RetryTime_tmp2 -= 1
@@ -184,6 +184,8 @@ class pywget(pywget_funcs):
                         print('接收失败, %s' % i_msg)
                     else:
                         break
+                    finally:
+                        time.sleep(2)
             self._shm[4] = self._size_total
             # 2) 看文件是否已经下载完成（是否需要断点续传）
             if checkfile:
@@ -260,6 +262,9 @@ class pywget(pywget_funcs):
                     print('已达到重试次数：', self._RetryTime)
         except KeyboardInterrupt:
             print('\n\n程序终止')
+        except RequestErro as e:
+            print('请求失败')
+            print('MissingSchema:', e)
         except Exception:
             import traceback
             traceback.print_exc()
