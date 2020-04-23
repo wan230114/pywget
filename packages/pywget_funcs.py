@@ -53,15 +53,13 @@ class pywget_funcs:
 
     def __support_continue__(self, url):
         '''测试断点续传，返回数字0或1'''
-        r = self.__get_Requests__(url, method='head',
-                                  headers=self._headers_copy)
-        # print('断点续传测试', r.headers)
+        r = self.__get_Requests__(url, headers=self._headers_copy)
         try:
             if 'Content-Length' in r.headers:
                 self._size_total = int(r.headers['Content-Length'])
             elif 'content-length' in r.headers:
                 self._size_total = int(r.headers['content-length'])
-            print('获取到文件长度:', self._size_total)
+            # print('获取到文件长度:', self._size_total)
             return 1
         except Exception:
             try:
@@ -100,7 +98,7 @@ class pywget_funcs:
 
     def __do_recv__(self):
         '''请求的准备工作
-        0) 发送网址，获取是否连接
+        0) 发送网址，获取是否连接成功
         1) 接收断点续传信息和开始信息
         2) 发送网页请求头
         3) 接收文件总长度
@@ -129,17 +127,23 @@ class pywget_funcs:
             sys.exit(1)
 
         # 2) 发送网页请求头
-        self.__mysend__(json.dumps(self._headers).encode('utf-8'))
+        self.__mysend__(json.dumps(self._headers_copy).encode('utf-8'))
 
         # 3) 接收文件总长度
         self._size_total = int(self.__myrecv__())
         self._size_recved = 0
-        print('[文件接收状态:', self._size_NOW, '/', self._size_total,
-              self.__getsize__(self._size_total), ']')
 
     def __recv_data__(self):
-        '''传输下载的生成器'''
-        # n = 0
+        '''传输下载的生成器
+        # 1) 发送网页请求头，传输断点续传位置信息
+        # 2) 开始下载
+        '''
+        # 1) 发送网页请求头，传输断点续传位置信息
+        if self._stat:
+            self.__mysend__(json.dumps(self._size_NOW).encode('utf-8'))
+        print('[文件接收状态:', self._size_NOW, '/', self._size_total,
+              self.__getsize__(self._size_total), ']')
+        # 2) 开始下载
         t0 = time.time()
         while True:
             ll = self.__recv_size__(4)
@@ -216,7 +220,7 @@ class pywget_funcs:
 
     def __get_Requests__(self, url_raw, method='get',
                          headers=None, jumptime=20,
-                         RQTIME=20):
+                         RQTIME=30):
         '''访问并获取iters'''
         from requests.packages.urllib3.exceptions import InsecureRequestWarning
         # 禁用安全请求警告
@@ -246,7 +250,7 @@ class pywget_funcs:
                 if n >= jumptime:
                     raise Exception('跳转次数大于%s次，请检查请求地址是否正确' % jumptime)
                 return r
-            except requests.exceptions.ReadTimeout:
+            except requests.ConnectTimeout:
                 print('Time out. Retring %d times.' % (i+1))
         else:
             raise

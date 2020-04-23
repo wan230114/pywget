@@ -68,7 +68,7 @@ class pywget(pywget_funcs):
                         seconds = datetime.timedelta(
                             seconds=(_size_total - _size_NOW) / speed)
                     else:
-                        seconds = '[Not sure]......     '
+                        seconds = '-:--:--.------'
                     sys.stdout.write(
                         'Now: %8s, Total: %8s, Download Speed: %8s/s  in %s   %s' % (
                             self.__getsize__(_size_NOW),
@@ -158,10 +158,13 @@ class pywget(pywget_funcs):
     def download_start(self, checkfile=1):
         try:
             self._shm[0] = 0
-            # 1) 请求开始前，准备工作
-            if self._is_sock:
+            # 1) 请求开始前，准备工作，获取是否支持断点续传信息，获取长度信息
+            if not self._is_sock:
+                self._stat = self.__support_continue__(self._url)
+            else:
                 for i in range(3):
                     try:
+                        time.sleep(0.5)
                         self._sock = self.__s_Connect__(self._proxy)
                         self.__do_recv__()
                     except ConnectionRefusedError:
@@ -172,18 +175,14 @@ class pywget(pywget_funcs):
                         print('，正在重试%d(3)次' % (i+1))
                     else:
                         break
-                    finally:
-                        time.sleep(1)
-            else:
-                # 判断断点续传
-                self._stat = self.__support_continue__(self._url)
             self._shm[4] = self._size_total
-            # 2) 看文件是否已经下载完成（需要 断点续传）
-            if checkfile and self.__deal_file__():
-                self.finished = True
-                return
-            else:
-                self._size_NOW = self._size
+            # 2) 看文件是否已经下载完成（是否需要断点续传）
+            if checkfile:
+                if self.__deal_file__():
+                    self.finished = True
+                    return
+                else:
+                    self._size_NOW = self._size
             # 3) 获取请求数据的迭代对象
             self._iters = self.__getIter__(self._size_NOW)
             print("Downloading...")
@@ -229,13 +228,13 @@ class pywget(pywget_funcs):
                         time_spend, speed, speed_tmp[-1]))
                 sys.stdout.flush()
                 if self._size_NOW > self._size_total:
-                    print('WARNING, 下载可能有问题', end='')
+                    print('WARNING, 下载可能有问题  ', end='')
                 if self._size_total:
                     comp_ = ' %.3f%%' % (self._size_NOW/self._size_total*100)
                 else:
                     comp_ = ''
-                print('已下载(b)/总字节数(b)：',
-                      self._size_NOW, '/', self._size_total, comp_)
+                print('已下载(b)/总字节数(b)：', self._size_NOW,
+                      '/', self._size_total, comp_)
             elif self._stat:  # 重试连接
                 time.sleep(1)
                 if self._RetryTime == 0:

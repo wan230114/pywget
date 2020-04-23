@@ -88,44 +88,47 @@ class pywgetServer(pywget_funcs):
                     # 2) 接收网页请求头
                     print('> 2 ', end='')
                     self._headers = json.loads(self.__myrecv__())
-                    if stat and self._headers.get('Range', 0):
-                        # 此时传输大小size
-                        size = int(re.findall(
-                            'bytes=(\d*)-', self._headers['Range'])[0])
-                    else:
-                        size = 0
 
                     # 3) 发送下载文件长度
                     print('> 3 ', end='')
                     self.__mysend__(str(self._size_total).encode('utf-8'))
 
                     # 4) 请求下载
+                    print('> 4 ', end='')
+                    if stat:
+                        _size = int(json.loads(self.__myrecv__()))
+                        self._headers.update({'Range': 'bytes=%d-' % _size})
+                    else:
+                        _size = 0
+                    # 5) 请求下载
+                    print('> 5 ', end='')
                     r = self.__get_Requests__(url)
                     t0 = time.time()
-                    allsize = 0
+                    _size_chunk = 0
                     chunk_size = 1024*10
-                    print('> 4 ', end='')
+                    print('>> %s(%s) --> %s(%s)' % (
+                        _size, self.__getsize__(_size),
+                        self._size_total, self.__getsize__(self._size_total)))
                     for chunk in r.iter_content(chunk_size=chunk_size):
-                        allsize += len(chunk)
+                        _size_chunk += len(chunk)
                         try:
                             self.__mysend__(chunk)
                         except Exception:
                             # print('详细错误信息:%s\n' % e, traceback.format_exc())
                             print('【发送失败】。。')
                             break
-                    else:
-                        print('> 5 ', end='')
-                    if (size + int(allsize)) >= int(self._size_total):
-                        # print('sending [ok]...')
+                    if (_size + int(_size_chunk)) >= int(self._size_total):
                         connfd.send('[ok]'.encode())
-                        print('sened[ok],耗时%.3fs,传输%s/%s' % (
-                            (time.time() - t0), allsize, self._size_total))
                         print('Success. 转发成功, ', end='')
                     else:
                         connfd.send(b'[FL]')
                         print('WARNING: 转发未成功, ', end='')
-                    print('传输: %s --- [+ %s] ---> %s all:%s()' % (
-                        size, allsize, size + int(allsize),
+                    print('耗时%.3fs' % (time.time() - t0))
+                    print('传输: %s(%s) --- [+ %s(%s)] ---> %s(%s)  all:%s(%s)' % (
+                        _size,  self.__getsize__(_size),
+                        _size_chunk,  self.__getsize__(_size_chunk),
+                        _size + _size_chunk, self.__getsize__(
+                            _size + _size_chunk),
                         self._size_total, self.__getsize__(self._size_total)))
                     connfd.close()
                     print('Connect closed\n')

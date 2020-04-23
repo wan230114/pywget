@@ -17,3 +17,4 @@ python3 pywget.py https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x8
 
 # 测试多层跳转
 python3 pywget.py https://www.arabidopsis.org/download_files/Genes/Araport11_genome_release/Araport11_blastsets/Araport11_genes.201606.pep.fasta.gz -f
+python3 pywget.py https://www.arabidopsis.org/download_files/Microarrays/Affymetrix/affy_AG_array_elements-2010-12-20.txt -f
