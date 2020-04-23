@@ -70,11 +70,11 @@ class pywget(pywget_funcs):
                     else:
                         seconds = '-:--:--.------'
                     sys.stdout.write(
-                        'Now: %8s, Total: %8s, Download Speed: %8s/s  in %s   %s' % (
+                        'Now: %8s, Download Speed: %8s/s  in %s  NowTime:%s  %s' % (
                             self.__getsize__(_size_NOW),
-                            self.__getsize__(_size_total),
                             self.__getsize__(speed),
                             seconds,
+                            str(datetime.datetime.now())[11:-7],
                             self._speed_end))
                     sys.stdout.flush()
                     _size2_last = _size_NOW
@@ -92,26 +92,20 @@ class pywget(pywget_funcs):
         if not self.force and os.path.exists(self.local_filename):
             # 不强制覆盖，下载文件存在
             local_filename_size = os.path.getsize(self.local_filename)
-            if local_filename_size == self._size_total and \
-                    not self.jg_isexits():
-                # 大小一致，并且不覆盖文件
-                print('下载文件已存在，%s' % self.local_filename)
-                print('请求返回文件字节数，为:', self._size_total)
-                print('本地文件大小字节数，为:', local_filename_size)
-                print('已跳过下载')
-                return 1
+            if local_filename_size == self._size_total:
+                self.finished = True
+                if not self.jg_isexits():
+                    # 大小一致，并且不覆盖文件
+                    print('下载文件已存在，%s' % self.local_filename)
+                    print('请求返回文件字节数，为:', self._size_total)
+                    print('本地文件大小字节数，为:', local_filename_size)
+                    print('已跳过下载')
+                    return 1
             elif self._stat:
-                # 判断是否支持断点续传
-                if os.path.exists(self.tmp_filename):
-                    # 判断缓存文件是否存在
-                    try:
-                        with open(self.tmp_filename, 'rb') as fin:
-                            self._size = int(fin.read())
-                    except Exception:
-                        print('获取已下载字节数失败，已重置下载文件')
-                        self.__touch__(self.local_filename)
-                        self.__touch__(self.tmp_filename)
-                        return 0
+                # 支持断点续传
+                self._size = self._size_NOW = local_filename_size
+                self.__touch__(self.tmp_filename)
+                return 0
             # elif (local_filename_size > 0) and \
             #     (local_filename_size == self._size_total or
             #         self._size_total == 0):
@@ -146,13 +140,7 @@ class pywget(pywget_funcs):
         p = Process(target=self.show_speed)
         p.start()
         self.download_start()
-        self._shm[1] = 1
         p.join()
-        # 处理未完成时结果
-        if not self.finished:
-            with open(self.tmp_filename, 'w') as tmp:
-                tmp.write(str(self._size_NOW))
-            print("\nDownload pause.\n")
 
     def download_start(self, checkfile=1):
         try:
@@ -173,7 +161,7 @@ class pywget(pywget_funcs):
                     else:
                         i_msg = '正在重新连接，第%d次' % i
                     try:
-                        time.sleep(0.5)
+                        time.sleep(0.2)
                         self._sock = self.__s_Connect__(self._proxy)
                         self.__do_recv__()
                     except ConnectionResetError:
@@ -194,6 +182,7 @@ class pywget(pywget_funcs):
                     return
                 else:
                     self._size_NOW = self._size
+            self.__support_continue_do__(self._stat, self._size_NOW)
             # 3) 获取请求数据的迭代对象
             self._iters = self.__getIter__(self._size_NOW)
             print("Downloading...")
@@ -202,19 +191,16 @@ class pywget(pywget_funcs):
                 print('[Size]:', self._size_NOW,
                       '-- [+%d] --> %d(%s)' % (
                           size_need, self._size_total,
-                          self.__getsize__(size_need)))
+                          self.__getsize__(self._size_total)))
             else:
                 print("[Size]: None")
             _size_NOW_copy = self._size_NOW
-            with open(self.local_filename, 'ab+') as f:
-                f.seek(self._size_NOW)
-                f.truncate()
+            with open(self.local_filename, 'ab+', buffering=0) as f:
                 time_start = datetime.datetime.now()
                 self._shm[0] = 1
                 for chunk in self._iters:
                     if chunk:
                         f.write(chunk)
-                        f.flush()
                         self._size_NOW += len(chunk)
                         self._shm[2], self._shm[3] = 1, self._size_NOW
                 # input()
@@ -268,6 +254,8 @@ class pywget(pywget_funcs):
         except Exception:
             import traceback
             traceback.print_exc()
+        finally:
+            self._shm[1] = 1
 
 
 def main():

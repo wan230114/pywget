@@ -171,8 +171,11 @@ class pywget_funcs:
                     sep='\n')
                 break
             elif ll == b'[FL]':
-                print('下载字节数不统一可能未完成，本次传输 %s bytes，已下载 %s / %s' %
-                      (self._size_recved, self._size_NOW, self._size_total))
+                print('下载字节数不统一可能未完成，本次传输 %sb(%s)，'
+                      '已下载 %s(%s) , 总大小： %s(%s)' %
+                      (self._size_recved, self.__getsize__(self._size_recved),
+                       self._size_NOW, self.__getsize__(self._size_NOW),
+                       self._size_total, self.__getsize__(self._size_total)))
                 break
             # 1、得到size
             header_size = struct.unpack('i', ll)[0]
