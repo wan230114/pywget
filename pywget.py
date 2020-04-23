@@ -23,12 +23,12 @@ def fargv():
                         help='输出的下载文件的name')
     parser.add_argument('-p', '--proxy', type=str, default=None,
                         help='代理服务端的IP及端口，如：118.96.72.54:8668')
+    parser.add_argument('-t', '--RetryTime', type=int, default=1000,
+                        help='是否重试无限次，默认1000次，输入0代表无限次')
     parser.add_argument('-f', '--force', action='store_true', default=False,
                         help='是否强制覆盖已下载文件')
     parser.add_argument('-c', '--complete', action='store_true', default=False,
                         help='是否完整打印日志')
-    parser.add_argument('-t', '--RetryTime', action='store_true', default=1000,
-                        help='是否重试无限次，默认1000次，输入0代表无限次')
     args = parser.parse_args()
     print(args)
     return args.__dict__
@@ -140,9 +140,8 @@ class pywget(pywget_funcs):
         self.tmp_filename = self.local_filename + '.downtmp'
 
         # 执行下载开始
-        self._RetryTime_tmp = self._RetryTime
-
-        self.__tmp__ = 0
+        self._RetryTime_tmp = self._RetryTime if self._RetryTime else -1
+        self._RetryTime_tmp2 = self._RetryTime_tmp
 
         p = Process(target=self.show_speed)
         p.start()
@@ -162,17 +161,27 @@ class pywget(pywget_funcs):
             if not self._is_sock:
                 self._stat = self.__support_continue__(self._url)
             else:
-                for i in range(3):
+                i = 0
+                while True:
+                    i += 1
+                    if self._RetryTime_tmp2 == 0:
+                        print('连接出错')
+                        raise
+                    elif self._RetryTime_tmp2 > 0:
+                        self._RetryTime_tmp2 -= 1
+                        i_msg = '正在重新连接，第%d(%s)次' % (i, self._RetryTime)
+                    else:
+                        i_msg = '正在重新连接，第%d次' % i
                     try:
                         time.sleep(0.5)
                         self._sock = self.__s_Connect__(self._proxy)
                         self.__do_recv__()
+                    except ConnectionResetError:
+                        print('连接超时, %s' % i_msg)
                     except ConnectionRefusedError:
-                        print('连接出错', end='')
-                        print('，正在重试%d(3)次' % (i+1))
+                        print('连接出错, %s' % i_msg)
                     except AssertionError:
-                        print('接收失败', end='')
-                        print('，正在重试%d(3)次' % (i+1))
+                        print('接收失败, %s' % i_msg)
                     else:
                         break
             self._shm[4] = self._size_total
@@ -238,7 +247,9 @@ class pywget(pywget_funcs):
             elif self._stat:  # 重试连接
                 time.sleep(1)
                 if self._RetryTime == 0:
+                    self._RetryTime_tmp += 1
                     self.download_start(0)
+                    print('\n\n下载中断，正在断点续传，正在进行第%d次重试' % self._RetryTime_tmp)
                 elif self._RetryTime_tmp > 0:
                     self._RetryTime_tmp -= 1
                     print('\n\n下载中断，正在断点续传，正在进行第%d(%d)次重试' % (

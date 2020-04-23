@@ -112,7 +112,7 @@ class pywget_funcs:
                          (self._url, getpass.getuser())).encode())
         print(time.strftime("[%Y-%m-%d %H:%M:%S, Content Success]",
                             time.localtime()))
-        print('正在请求...')
+        print('正在排队...')
 
         # 1) 接收断点续传信息和开始信息
         msg = self.__recv_size__(8).decode()
