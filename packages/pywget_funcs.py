@@ -77,10 +77,6 @@ class pywget_funcs:
 
     def __support_continue_do__(self, stat, size):
         '''升级self.headers'''
-        if stat:  # 支持断点续传
-            print('[stat]支持断点续传')
-        else:
-            print('[stat]下载不支持断点续传')
         if size != 0:
             self._headers.update({'Range': "bytes=%d-" % size})
 

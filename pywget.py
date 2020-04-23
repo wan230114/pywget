@@ -47,11 +47,12 @@ class pywget(pywget_funcs):
     def jg_isexits(self):
         """通过标准输入来判断是否覆盖原文件"""
         for x in range(3):
-            a = input("检测本地文件与待下载文件大小一致，是否覆盖原文件？(y/n)")
+            a = input('检测本地文件与待下载文件大小一致，是否覆盖原文件？[y|n]\n[n] >>> ')
             if a == "y":
                 return True
-            elif a == "n":
+            elif not a or a == "n":
                 return False
+            print(' (请输入y/n, 或直接按回车默认输入n)')
 
     def show_speed(self):
         """使用子进程显示下载速度"""
@@ -96,15 +97,17 @@ class pywget(pywget_funcs):
                 self.finished = True
                 if not self.jg_isexits():
                     # 大小一致，并且不覆盖文件
-                    print('下载文件已存在，%s' % self.local_filename)
-                    print('请求返回文件字节数，为:', self._size_total)
-                    print('本地文件大小字节数，为:', local_filename_size)
+                    print('下载文件已存在: %s' % self.local_filename)
+                    print('文件字节数:', self._size_total,
+                          self.__getsize__(self._size_total))
                     print('已跳过下载')
                     return 1
             elif self._stat:
                 # 支持断点续传
                 self._size = self._size_NOW = local_filename_size
-                self.__touch__(self.tmp_filename)
+                if not os.path.exists(self.tmp_filename):
+                    print('\n[WARNING]: 缓存文件不存在, 断点续传结束后请检查下载的文件完整性\n')
+                    self.__touch__(self.tmp_filename)
                 return 0
             # elif (local_filename_size > 0) and \
             #     (local_filename_size == self._size_total or
@@ -174,6 +177,10 @@ class pywget(pywget_funcs):
                         break
                     finally:
                         time.sleep(2)
+            if self._stat:  # 支持断点续传
+                print('[stat]支持断点续传')
+            else:
+                print('[stat]下载不支持断点续传')
             self._shm[4] = self._size_total
             # 2) 看文件是否已经下载完成（是否需要断点续传）
             if checkfile:
