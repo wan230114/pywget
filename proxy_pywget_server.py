@@ -8,11 +8,13 @@
 
 import socket
 import argparse
-import time
 import traceback
+import time
+import sys
 import re
 import json
 import struct
+import requests
 from packages.pywget_funcs import pywget_funcs, RequestErro
 
 
@@ -34,9 +36,8 @@ def print(*args, **kwargs):
 
 class pywgetServer(pywget_funcs):
 
-    def __s_getsocket__(self, proxy, CHECK_TIMEOUT=30):
+    def __s_getsocket__(self, HOST, PORT, CHECK_TIMEOUT=30):
         '''创建套接字，创建链接，创建父子进程　功能函数调用'''
-        HOST, PORT = proxy.split(':')
         # ADDR = ('0.0.0.0', 8080)  # server address
         ADDR = (HOST, int(PORT))
         # 创建tcp套接字
@@ -61,11 +62,15 @@ class pywgetServer(pywget_funcs):
 
     def do_parent(self, proxy):
         print('Run in', proxy)
+        HOST, PORT = proxy.split(':')
+        print('Extranet proxy address is: %s:%s' %
+              (requests.get("http://icanhazip.com").text.strip(),
+               PORT))
         while True:
             try:
-                self._sock_s = self.__s_getsocket__(proxy)
+                self._sock_s, connfd = None, None
+                self._sock_s = self.__s_getsocket__(HOST, PORT)
                 self._size_NOW = 0
-                connfd = None
                 connfd, addr = self._sock_s.accept()
                 self._sock = connfd
                 self._sock.settimeout(10)
@@ -151,16 +156,16 @@ class pywgetServer(pywget_funcs):
                     except Exception as e:
                         print('发送[Download Failed]信号失败', e)
                 else:
-                    # with open('log-other', 'a', buffering=1) as fo:
-                    print("\nConnect from", addr)
+                    # with open('log-other', 'a', buffering=0) as fo:
+                    print("\nConnect from", addr, file=sys.stderr)
                     print(time.strftime("%Y-%m-%d %H:%M:%S",
-                                        time.localtime()))
-                    print('收到非指定信息：')
-                    print(msg.strip())
+                                        time.localtime()), file=sys.stderr)
+                    print('收到非指定信息：', file=sys.stderr)
+                    print(msg.strip(), file=sys.stderr)
                     text = 'Email: 1170101471@qq.com'
                     connfd.send(text.encode())
-                    print('已发送：' + text)
-                    print('Connect closed\n')
+                    print('已发送：' + text, file=sys.stderr)
+                    print('Connect closed\n', file=sys.stderr)
                     connfd.close()
             except KeyboardInterrupt:
                 print('服务已终止!')
@@ -180,9 +185,10 @@ class pywgetServer(pywget_funcs):
                 #     print('发送[Download Filed]失败', e2)#, file=fo)
                 print('详细错误信息:\n', traceback.format_exc(), '\n服务已重启')
             finally:
-                self._sock_s.close()
                 if connfd:
                     connfd.close()
+                if self._sock_s:
+                    self._sock_s.close()
                 time.sleep(1)
 
 
