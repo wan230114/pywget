@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*
 # @Author: ChenJun
 # @Email:  chenjun2049@foxmail.com
@@ -7,6 +8,7 @@
 # @Last Modified time: 2019-10-24 20:08:12
 
 import os
+import re
 import sys
 import argparse
 import datetime
@@ -129,6 +131,13 @@ class pywget(pywget_funcs):
         '''主程序'''
         print('Download start:')
         print('[url]:', self._url)
+        # 0) header请求
+        r = self.__get_Requests__(self._url, headers=self._headers_copy)
+        tmpname = re.findall("filename=\"(.*?)\";",
+                             r.headers.get("Content-Disposition", ""))
+        if tmpname and not self.filename:
+            self.filename = tmpname[0]
+
         # 1) 文件名准备
         if not self.filename:
             self.filename = self.__remove_nonchars__(
