@@ -61,3 +61,13 @@ python3 pywget.py www.baidu.com -f -p 144.34.179.134:8080 -o 1
 ```
 
 已修复
+
+### 2021年08月03日19:13 发现当下载文件过大，剩余时间计算错误问题。
+
+修改 共享内存 数据类型为 i --> l
+```python
+# self._shm = Array('i', [0, 0, 0, self._size_NOW, self._size_total]) -->
+self._shm = Array('l', [0, 0, 0, self._size_NOW, self._size_total])
+```
+
+已修复

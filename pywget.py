@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*
-# @Author: ChenJun
-# @Email:  chenjun2049@foxmail.com
-# @Qmail:  1170101471@qq.com
-# @Date:   2019-09-08 17:24:02
-# @Last Modified by:   JUN
-# @Last Modified time: 2019-10-24 20:08:12
+# -*- coding:utf-8 -*-
+
+#############################################
+# @ Author: Chen Jun
+# @ Author Email: 1170101471@qq.com
+# @ Created Date: 2019-09-08 17:24:02
+# @ Modified By: Chen Jun
+# @ Last Modified: 2021-08-03, 19:12:22
+#############################################
+
 
 import os
 import re
@@ -44,7 +47,7 @@ class pywget(pywget_funcs):
         self.finished = False
         self._size_NOW = self._size  # 记录此时获得了多少数据
         # 创建共享内存，[开始, 结束, 计算速度, 存储当前大小]
-        self._shm = Array('i', [0, 0, 0, self._size_NOW, self._size_total])
+        self._shm = Array('l', [0, 0, 0, self._size_NOW, self._size_total])
 
     def jg_isexits(self):
         """通过标准输入来判断是否覆盖原文件"""
@@ -61,12 +64,13 @@ class pywget(pywget_funcs):
         # print('开启子进程')
         try:
             _size2_last = list(self._shm)[2]
+            flush_speed = 1
             while True:
                 start, end, isrun, _size_NOW, _size_total = self._shm
                 if end:
                     break
                 if start and isrun:
-                    speed = (_size_NOW - _size2_last) / 0.5
+                    speed = (_size_NOW - _size2_last) / flush_speed
                     if speed > 0 and _size_total > 0:
                         seconds = datetime.timedelta(
                             seconds=(_size_total - _size_NOW) / speed)
@@ -81,7 +85,7 @@ class pywget(pywget_funcs):
                             self._speed_end))
                     sys.stdout.flush()
                     _size2_last = _size_NOW
-                time.sleep(0.5)
+                time.sleep(flush_speed)
         except KeyboardInterrupt:
             print('')  # 终止时加一个\n
         # print('关闭子进程')
