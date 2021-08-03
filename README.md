@@ -9,6 +9,16 @@
 
 ```bash
 git clone https://github.com/wan230114/pywget.git
+cd pywget
+
+# export pywget.py
+echo '
+# export pywget.py
+export PATH='$PWD'/bin:$PATH' >>~/.bashrc
+source ~/.bashrc
+
+# usage
+pywget.py -h
 ```
 
 ### 提升空间：
