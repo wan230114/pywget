@@ -6,7 +6,7 @@
 # @ Author Email: 1170101471@qq.com
 # @ Created Date: 2019-09-08 17:24:02
 # @ Modified By: Chen Jun
-# @ Last Modified: 2021-08-03, 19:12:22
+# @ Last Modified: 2022-06-29, 18:10:07
 #############################################
 
 
@@ -137,10 +137,12 @@ class pywget(pywget_funcs):
         print('[url]:', self._url)
         # 0) header请求
         r = self.__get_Requests__(self._url, headers=self._headers_copy)
-        tmpname = re.findall("filename=\"(.*?)\";",
-                             r.headers.get("Content-Disposition", ""))
+        print('返回的headers：', r.headers)
+        tmpname = re.findall("filename=(.*);*",
+                             r.headers.get("Content-Disposition", ""),
+                             flags=re.IGNORECASE)
         if tmpname and not self.filename:
-            self.filename = tmpname[0]
+            self.filename = tmpname[0].strip('\"\'')
 
         # 1) 文件名准备
         if not self.filename:

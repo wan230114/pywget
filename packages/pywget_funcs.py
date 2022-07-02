@@ -256,13 +256,13 @@ class pywget_funcs:
                     r = r_request(url, stream=True,
                                   verify=False, headers=headers,
                                   timeout=RQTIME)
-                    # print('返回的headers：', r.headers)
                 if n >= jumptime:
                     raise Exception('跳转次数大于%s次，请检查请求地址是否正确' % jumptime)
-                return r
+                break
             except requests.ConnectTimeout:
                 print('Time out. Retring %d times.' % (i+1))
             except requests.exceptions.MissingSchema as e:
                 raise RequestErro(e)
         else:
             raise
+        return r
